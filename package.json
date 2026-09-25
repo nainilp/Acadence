@@ -1,0 +1,62 @@
+{
+  "name": "acadence",
+  "version": "1.0.0",
+  "description": "A local-first rotating study planner with a desktop Shih Tzu companion.",
+  "author": "Acadence",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "test": "node --test tests/*.test.mjs",
+    "assets": "node scripts/assets.mjs",
+    "dist": "npm run assets && npm run build && electron-builder --win nsis --x64",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "build": {
+    "appId": "com.acadence.study",
+    "productName": "Acadence",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "shared/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asarUnpack": ["node_modules/**/*", "electron/fullscreen.ps1"],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "artifactName": "Acadence-Setup-${version}.${ext}"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.4",
+    "vite": "^8.3.1"
+  }
+}

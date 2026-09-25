@@ -1,0 +1,83 @@
+import { _electron as electron } from '@playwright/test';
+import { mkdir,writeFile,readFile } from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import sharp from 'sharp';
+import {dateKey,monday,addDays} from '../shared/planner.mjs';
+
+const root=process.cwd();
+await mkdir('test-results',{recursive:true});
+const dataPath=path.join(root,'.test-data',`smoke-${Date.now()}`);
+const app=await electron.launch({...(process.env.ACADENCE_EXECUTABLE?{executablePath:process.env.ACADENCE_EXECUTABLE,args:[]}:{args:['.']}),cwd:root,env:{...process.env,ACADENCE_DATA_DIR:dataPath},timeout:30000});
+const errors=[];
+app.process().stderr?.on('data',data=>{const output=data.toString();if(/Error|Cannot find|MODULE_NOT_FOUND/i.test(output))console.error(output);});
+app.on('window',win=>{win.on('pageerror',e=>errors.push(e.message));});
+try{
+  await app.firstWindow();
+  let page;
+  for(let i=0;i<100;i++){page=app.windows().find(w=>w.url().includes('index.html')&&!w.url().includes('pet=1'));if(page)break;await new Promise(r=>setTimeout(r,100));}
+  console.log('Desktop windows:',app.windows().map(w=>w.url()));
+  assert.ok(page,'Main planner window is present');await page.waitForSelector('.app-shell');
+  await page.screenshot({path:'test-results/01-empty-today.png',fullPage:true});
+  assert.equal(await page.title(),'Acadence');
+  await page.getByRole('button',{name:'Subjects & topics',exact:true}).click();
+  for(const subject of ['Biology','Mathematics','English']){
+    await page.getByRole('button',{name:'Add subject',exact:true}).click();
+    await page.getByLabel('Subject name').fill(subject);
+    await page.getByRole('button',{name:'Save subject',exact:true}).click();
+    await page.locator('dialog').waitFor({state:'hidden'});
+  }
+  await page.locator('.subject-card').first().getByRole('button',{name:'Add topic',exact:true}).click();
+  await page.getByLabel('Topic name').fill('Cell division & mitosis');
+  await page.getByRole('button',{name:'heavy',exact:false}).click();
+  await page.getByRole('button',{name:'Save topic',exact:true}).click();
+  await page.locator('dialog').waitFor({state:'hidden'});
+  await page.evaluate(async week=>{const s=await window.acadence.get();for(const [i,subject] of s.subjects.entries())for(const [j,title] of (i===0?['Genetics & inheritance']:i===1?['Quadratic equations','Trigonometric identities']:['Poetry analysis','Essay structure']).entries())await window.acadence.action({type:'topic',subjectId:subject.id,title,effort:j%2?'light':'normal',week});},monday());
+  await page.screenshot({path:'test-results/02-subjects.png',fullPage:true});
+  await page.getByRole('button',{name:'Availability',exact:true}).click();
+  const mondayCell=page.getByRole('button',{name:'Monday 08:00 available',exact:true});await mondayCell.click();
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await page.screenshot({path:'test-results/03-availability.png',fullPage:true});
+  await page.getByRole('button',{name:'School timetable',exact:true}).click();
+  await page.getByLabel('Class / commitment').fill('Chemistry lab');
+  await page.getByRole('button',{name:'Add',exact:true}).click();
+  await page.getByRole('button',{name:'Your week',exact:true}).click();
+  await page.getByRole('button',{name:'Build / replan week',exact:true}).click();
+  await page.waitForSelector('.calendar-event.study');
+  await page.screenshot({path:'test-results/04-week.png',fullPage:true});
+  await page.locator('.calendar-event.study').first().click();
+  await page.getByRole('button',{name:'Lock',exact:true}).click();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await page.getByRole('button',{name:'Today',exact:true}).click();
+  await page.screenshot({path:'test-results/05-today.png',fullPage:true});
+  await page.getByRole('button',{name:'Progress',exact:true}).click();
+  await page.screenshot({path:'test-results/06-progress.png',fullPage:true});
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  await page.getByRole('button',{name:'dark mode',exact:false}).click();
+  await page.screenshot({path:'test-results/07-dark-settings.png',fullPage:true});
+  await page.getByRole('button',{name:'light mode',exact:false}).click();
+  const pet=app.windows().find(w=>w.url().includes('pet=1'));assert.ok(pet,'Companion window exists');
+  await pet.getByRole('button',{name:'Talk to your study companion'}).click();
+  await pet.screenshot({path:'test-results/08-companion.png',omitBackground:true});
+  const info=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().map(w=>({transparent:w.isTransparent?.(),alwaysOnTop:w.isAlwaysOnTop(),size:w.getSize()})));
+  assert.ok(info.some(w=>w.alwaysOnTop),'Companion is always on top');
+  // Exercise bundled OCR through the same bridge as a user's uploaded image.
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="460"><rect width="100%" height="100%" fill="white"/><g fill="black" font-family="Arial" font-size="48"><text x="70" y="95">Monday 09:00 - 10:00 Biology</text><text x="70" y="195">Tuesday 11:00 - 12:00 Mathematics</text><text x="70" y="295">Friday 13:00 - 14:00 English</text></g></svg>';
+  const png=await sharp(Buffer.from(svg)).png().toBuffer();await writeFile('test-results/timetable-fixture.png',png);
+  const recognized=await page.evaluate(data=>window.acadence.ocr(data),'data:image/png;base64,'+png.toString('base64'));
+  assert.match(recognized.text,/Biology/i);assert.match(recognized.text,/Mathematics/i);
+  await page.getByRole('button',{name:'School timetable',exact:true}).click();
+  await page.locator('input[type=file]').setInputFiles(path.join(root,'test-results/timetable-fixture.png'));
+  await page.getByRole('heading',{name:'Review recognized classes',exact:true}).waitFor();
+  await page.locator('.class-edit-row').first().waitFor();
+  assert.equal(await page.locator('.class-edit-row').count(),3);
+  await page.screenshot({path:'test-results/10-ocr-review.png',fullPage:true});
+  await page.getByLabel('I checked every class, day, and time.').check();
+  await page.getByRole('button',{name:'Confirm and add classes',exact:true}).click();
+  await page.getByRole('heading',{name:'Review recognized classes',exact:true}).waitFor({state:'hidden'});
+  await writeFile('test-results/ocr-result.json',JSON.stringify({text:recognized.text,confidence:recognized.confidence},null,2));
+  const saved=JSON.parse(await readFile(path.join(dataPath,'study-data.json'),'utf8'));assert.equal(saved.subjects.length,3);assert.equal(saved.topics.length,6);assert.equal(saved.classes.length,4);assert.ok(saved.sessions.length>0);
+  assert.deepEqual(errors,[]);
+  await writeFile('test-results/smoke-report.json',JSON.stringify({passed:true,windows:info,subjects:saved.subjects.length,topics:saved.topics.length,sessions:saved.sessions.length,ocrConfidence:recognized.confidence,errors},null,2));
+  console.log('Electron smoke passed: app + companion, subject/topic flows, availability, classes, schedule, locks, themes, persistence and bundled OCR.');
+}catch(error){console.error('Renderer errors:',errors);console.error('Windows:',app.windows().map(w=>w.url()));for(const [i,w] of app.windows().entries()){await w.screenshot({path:`test-results/failure-${i}.png`}).catch(()=>{});console.error((await w.locator('body').innerText().catch(()=>'' )).slice(0,2000));}throw error;}finally{await app.close();}

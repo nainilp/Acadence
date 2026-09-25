@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+.test-data/
+test-results/
+*.log
+.env
+.env.*
+!.env.example
+*.traineddata
+*.traineddata.gz
+Thumbs.db
+Desktop.ini
