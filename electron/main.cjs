@@ -5,14 +5,14 @@ const {pathToFileURL}=require('node:url');
 const {spawn}=require('node:child_process');
 const testData=process.env.ACADENCE_DATA_DIR;
 if(testData)app.setPath('userData',path.resolve(testData));
-let state,core,actions,mainWindow,petWindow,tray,quitting=false,fullHelper,fullScreen=false,queue=Promise.resolve(),lastPulse=Date.now(),lastCue='',lastCheckpoint=Date.now();
+let state,core,actions,goals,mainWindow,petWindow,tray,quitting=false,fullHelper,fullScreen=false,queue=Promise.resolve(),lastPulse=Date.now(),lastCue='',lastCheckpoint=Date.now();
 const dataFile=()=>path.join(app.getPath('userData'),'study-data.json');
 const iconFile=path.join(__dirname,'../assets/icon.png');
 const appUrl=pathToFileURL(path.join(__dirname,'../dist/index.html')).href;
 function emit(channel,value){for(const w of BrowserWindow.getAllWindows())if(!w.isDestroyed())w.webContents.send(channel,value);}
 async function persist(){const filename=dataFile();await fs.mkdir(path.dirname(filename),{recursive:true});const tmp=filename+'.tmp';await fs.writeFile(tmp,JSON.stringify(state,null,2),'utf8');await fs.rename(tmp,filename);}
 function enqueue(fn){const result=queue.then(fn);queue=result.catch(()=>{});return result;}
-function syncWindows(){if(petWindow){petWindow.setAlwaysOnTop(!!state.settings.alwaysOnTop);if(state.settings.petVisible&&!(fullScreen&&state.settings.hideFullscreen))petWindow.showInactive();else petWindow.hide();}}
+function syncWindows(){if(petWindow){petWindow.setAlwaysOnTop(!!state.settings.alwaysOnTop,'screen-saver');if(state.settings.petVisible&&!(fullScreen&&state.settings.hideFullscreen))petWindow.showInactive();else petWindow.hide();}}
 async function perform(action,now=Date.now()){return enqueue(async()=>{const next=actions.applyAction(state,action,now);const previous=state;state=next;try{await persist();}catch(e){state=previous;throw e;}if(action.type==='settings'){if(!testData)app.setLoginItemSettings({openAtLogin:!!state.settings.startup});syncWindows();}emit('state:updated',state);return state;});}
 function secure(w){w.webContents.setWindowOpenHandler(()=>({action:'deny'}));w.webContents.on('will-navigate',(e,url)=>{if(!url.startsWith(appUrl))e.preventDefault();});}
 function createWindows(){
@@ -47,13 +47,13 @@ async function pulse(){
   if(state.active?.runningSince&&gap>15000){await perform({type:'pause',reason:'Your laptop was asleep or the app was interrupted'},now-gap);notify('Welcome back','Your timer is paused. Resume when you are ready.');}
   if(state.sessions.some(s=>core.isOverdue(s,now)))await perform({type:'tick'});
   const active=state.active;
-  if(active&&core.elapsed(state,now)>=active.targetMs){const key=active.sessionId+'end';if(lastCue!==key){lastCue=key;await perform({type:'pause',reason:'Session time is complete'});notify('Time to check in','Did you finish your topic? Choose Finished or Need more time.');}}
-  else if(!active){const s=state.sessions.find(s=>s.status==='planned'&&s.date===core.dateKey(now)&&core.at(s.date,s.start)<=now&&core.at(s.date,s.end)>now);if(s&&lastCue!==s.id){lastCue=s.id;notify(s.type==='break'?'Take a breather':'Your next study session is ready',s.type==='break'?'Step away for a moment. Your plan will be here.':state.topics.find(t=>t.id===s.topicId)?.title||'Open Acadence to begin.');}}
+  if(active&&core.elapsed(state,now)>=active.targetMs){const key=active.sessionId+'end';if(lastCue!==key){lastCue=key;await perform({type:'pause',reason:'Session time is complete'});const s=state.sessions.find(s=>s.id===active.sessionId);notify('Time to check in',s?.goalId?'Did you finish this slide block? Record your progress so I can adjust your plan.':'Did you finish your topic? Choose Finished or Need more time.');}}
+  else if(!active){const s=state.sessions.find(s=>s.status==='planned'&&s.date===core.dateKey(now)&&core.at(s.date,s.start)<=now&&core.at(s.date,s.end)>now);if(s&&lastCue!==s.id){lastCue=s.id;notify(s.type==='break'?'Take a breather':'Your next study session is ready',s.type==='break'?'Step away for a moment. Your plan will be here.':goals.sessionTitle(state,s));}}
   if(active?.runningSince&&now-lastCheckpoint>30000){lastCheckpoint=now;await enqueue(async()=>{state.active.elapsedMs=core.elapsed(state,now);state.active.runningSince=now;await persist();});}
 }
 async function boot(){
   if(process.platform==='win32')app.setAppUserModelId('com.acadence.study');
-  core=await import('../shared/planner.mjs');actions=await import('../shared/actions.mjs');
+  core=await import('../shared/planner.mjs');actions=await import('../shared/actions.mjs');goals=await import('../shared/goals.mjs');
   try{state=core.validateState(JSON.parse(await fs.readFile(dataFile(),'utf8')));}catch(e){state=core.freshState();if(e.code!=='ENOENT'){await dialog.showMessageBox({type:'warning',message:'Acadence could not read the saved data.',detail:'The original file will be preserved as study-data-recovery.json. You can restore a backup in Settings.'});await fs.copyFile(dataFile(),path.join(app.getPath('userData'),'study-data-recovery.json')).catch(()=>{});}}
   if(state.active){state.active.runningSince=null;state.active.pauseReason='App restarted — resume when ready';}core.reconcile(state);await persist();
   // There are no runtime remote endpoints. Block renderer network requests explicitly.

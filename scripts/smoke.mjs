@@ -61,6 +61,10 @@ try{
   await pet.screenshot({path:'test-results/08-companion.png',omitBackground:true});
   const info=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().map(w=>({transparent:w.isTransparent?.(),alwaysOnTop:w.isAlwaysOnTop(),size:w.getSize()})));
   assert.ok(info.some(w=>w.alwaysOnTop),'Companion is always on top');
+  await page.evaluate(()=>window.acadence.action({type:'settings',values:{alwaysOnTop:false}}));
+  assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('pet=1')).isAlwaysOnTop()),false);
+  await page.evaluate(()=>window.acadence.action({type:'settings',values:{alwaysOnTop:true}}));
+  assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('pet=1')).isAlwaysOnTop()),true);
   // Exercise bundled OCR through the same bridge as a user's uploaded image.
   const svg='<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="460"><rect width="100%" height="100%" fill="white"/><g fill="black" font-family="Arial" font-size="48"><text x="70" y="95">Monday 09:00 - 10:00 Biology</text><text x="70" y="195">Tuesday 11:00 - 12:00 Mathematics</text><text x="70" y="295">Friday 13:00 - 14:00 English</text></g></svg>';
   const png=await sharp(Buffer.from(svg)).png().toBuffer();await writeFile('test-results/timetable-fixture.png',png);

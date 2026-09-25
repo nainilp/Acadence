@@ -1,6 +1,6 @@
 # Acadence
 
-A personal Windows study planner with a floating white Shih Tzu companion. Acadence rotates between subjects, fits study sessions around school and breaks, and returns to unfinished topics at the next turn of their subject.
+A personal Windows study planner with a floating white Shih Tzu companion with small brown patches. Acadence rotates between subjects, fits study sessions around school and breaks, and returns to unfinished work at the next turn of its subject.
 
 ## Install and open
 
@@ -22,6 +22,16 @@ The unpacked app is also available at **`release/win-unpacked/Acadence.exe`**. K
 Once a plan exists, changes to topics, classes, availability, and breaks automatically replan upcoming unlocked sessions. Completed and missed records stay in history. Locked sessions are preserved; conflicts involving them are explicitly flagged for you to resolve.
 
 ## Sessions and the companion
+
+### Slide goals
+
+In **Subjects & topics**, choose **Add slide goal** under a subject. Enter a goal name, the number of slides to study, a starting slide number (normally 1), a finish date, and Light / Normal / Heavy effort. Saving builds a plan through the deadline, up to one year ahead. Each study block displays its exact slide range, and the goal card tracks completed slides.
+
+Slides are divided into whole ranges across available study blocks, weighted by each block's duration. Subjects continue alternating. Sessions aim for 40 / 60 / 90 minutes according to effort and may shorten to fit available time. Review the resulting slide counts: the app does not know how difficult an individual slide is. When no time fits before the deadline, a planning note calls that out.
+
+**Finished block** records every slide in the current range. For partial completion, enter how many slides you completed **from the beginning of that range**, choose extra minutes, and select **Need more time**. The unfinished range returns at the next turn of the subject, and the rest of the plan adjusts. This works in the main app and the companion. Skipped or missed ranges remain in history while their unfinished slides are rescheduled. Replan after a missed session to refresh the remaining work.
+
+Editing a goal replans it; archiving removes its upcoming blocks and preserves study history. Locking preserves a session's time, while its slide allocation can change as progress or the goal changes. Goals and progress are included in local backups; older backups without goals still work.
 
 - Subjects alternate, continuing across days. Subjects without pending topics are skipped.
 - **Finished** completes the topic. **Need more time** asks for additional minutes and returns to that topic at the next turn of its subject.
@@ -69,6 +79,8 @@ npm test                 # scheduling, streak, validation, and parser tests
 npm run build           # production renderer
 npm run smoke           # desktop UI and offline OCR integration
 node scripts/lifecycle.mjs  # timer recovery, backup, restore, and reset
+node scripts/goals.mjs   # slide goals, partial completion, companion, backup
+node scripts/fullscreen.mjs # companion hides for fullscreen windows
 npm run dist            # Windows x64 NSIS installer
 ```
 
