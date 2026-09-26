@@ -1,0 +1,42 @@
+import {_electron as electron} from '@playwright/test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {freshState,dateKey,addDays} from '../shared/planner.mjs';
+const root=process.cwd(),dataPath=path.join(root,'.test-data',`bunsoy-${Date.now()}`),folder='test-results/bunsoy';
+await mkdir(dataPath,{recursive:true});await mkdir(folder,{recursive:true});
+const legacy=freshState();legacy.settings.petName='Mochi';delete legacy.settings.companionRevision;
+legacy.subjects=[{id:'saved-subject',name:'Biology',color:'#a84f70'}];
+await writeFile(path.join(dataPath,'study-data.json'),JSON.stringify(legacy));
+const app=await electron.launch({...(process.env.ACADENCE_EXECUTABLE?{executablePath:process.env.ACADENCE_EXECUTABLE,args:[]}:{args:['.']}),cwd:root,env:{...process.env,ACADENCE_DATA_DIR:dataPath}}),errors=[];
+app.on('window',w=>w.on('pageerror',e=>errors.push(e.message)));
+try{
+  await app.firstWindow();let page;
+  for(let i=0;i<100;i++){page=app.windows().find(w=>w.url().includes('index.html')&&!w.url().includes('pet=1'));if(page)break;await new Promise(r=>setTimeout(r,100));}
+  await page.waitForSelector('.app-shell');
+  const state=await page.evaluate(()=>window.acadence.get());assert.equal(state.settings.petName,'Bunsoy');assert.deepEqual(state.subjects,legacy.subjects);
+  await page.locator('svg.dog').waitFor({state:'visible'});
+  assert.ok(await page.locator('.focus-pet').innerText().then(x=>x.includes('Bunsoy')));
+  await page.screenshot({path:`${folder}/today.png`,fullPage:true});
+  await page.getByRole('button',{name:'Settings',exact:true}).click();assert.equal(await page.getByLabel('Companion’s name').inputValue(),'Bunsoy');
+  await page.screenshot({path:`${folder}/settings.png`,fullPage:true});
+  const pet=app.windows().find(w=>w.url().includes('pet=1'));await pet.locator('svg.dog').waitFor({state:'visible'});
+  await pet.getByRole('button',{name:'Talk to your study companion'}).click();
+  assert.equal(await pet.locator('.pet-bubble-head strong').innerText(),'Bunsoy');
+  const bounds=await pet.locator('svg.dog').boundingBox();assert.ok(bounds.width>100&&bounds.height>100&&bounds.y>=0&&bounds.y+bounds.height<=470);
+  await pet.screenshot({path:`${folder}/companion.png`,omitBackground:true});
+  assert.equal(await pet.evaluate(()=>getComputedStyle(document.documentElement).backgroundColor),'rgba(0, 0, 0, 0)');
+  await page.evaluate(async deadline=>{const a=window.acadence,s=await a.get();await a.action({type:'settings',values:{days:s.settings.days.map(d=>({...d,slots:[[0,1440]],budget:120,breakCount:0}))}});const next=await a.action({type:'goal',subjectId:s.subjects[0].id,title:'Biology slides',totalSlides:40,startSlide:1,effort:'normal',deadline});await a.action({type:'start',id:next.sessions.find(s=>s.type==='study'&&s.status==='planned').id});},addDays(dateKey(),1));
+  await page.getByRole('button',{name:'Today',exact:true}).click();await page.getByRole('button',{name:'Check in',exact:true}).click();
+  const dialog=await page.locator('dialog').boundingBox(),checkInArt=await page.locator('dialog svg.dog').boundingBox();
+  assert.ok(checkInArt.width<=dialog.width&&checkInArt.height<=160,'Check-in artwork fits its dialog');
+  await page.screenshot({path:`${folder}/check-in.png`,fullPage:true});
+  await page.getByRole('button',{name:'Finished block',exact:true}).click();await page.locator('dialog').waitFor({state:'hidden'});
+  await page.evaluate(()=>window.acadence.action({type:'settings',values:{theme:'dark',reducedMotion:true}}));
+  await pet.locator('svg.dog').evaluate(img=>img.classList.add('dog-happy'));
+  assert.equal(await pet.locator('svg.dog').evaluate(img=>getComputedStyle(img).animationName),'none');
+  await pet.screenshot({path:`${folder}/companion-dark.png`,omitBackground:true});
+  const saved=JSON.parse(await readFile(path.join(dataPath,'study-data.json'),'utf8'));assert.equal(saved.settings.petName,'Bunsoy');assert.deepEqual(saved.subjects,legacy.subjects);assert.deepEqual(errors,[]);
+  await writeFile(`${folder}/report.json`,JSON.stringify({passed:true,originalIllustration:true,profileMigration:true,studyDataPreserved:true,companionBounds:bounds,rendererErrors:errors},null,2));
+  console.log('Bunsoy passed: original illustrated artwork renders, legacy name upgrades, study records preserved, all pet placements, dark theme, and reduced motion.');
+}finally{await app.close();}

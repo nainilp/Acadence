@@ -1,6 +1,6 @@
 {
   "name": "acadence",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "A local-first rotating study planner with a desktop Shih Tzu companion.",
   "author": "Acadence",
   "private": true,
@@ -28,7 +28,10 @@
       "assets/**/*",
       "package.json"
     ],
-    "asarUnpack": ["node_modules/**/*", "electron/fullscreen.ps1"],
+    "asarUnpack": [
+      "node_modules/**/*",
+      "electron/fullscreen.ps1"
+    ],
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico",

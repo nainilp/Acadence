@@ -17,7 +17,7 @@ async function perform(action,now=Date.now()){return enqueue(async()=>{const nex
 function secure(w){w.webContents.setWindowOpenHandler(()=>({action:'deny'}));w.webContents.on('will-navigate',(e,url)=>{if(!url.startsWith(appUrl))e.preventDefault();});}
 function createWindows(){
   const common={preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true};
-  mainWindow=new BrowserWindow({width:1320,height:900,minWidth:900,minHeight:680,title:'Acadence',backgroundColor:'#eef3fc',icon:iconFile,show:false,webPreferences:common});
+  mainWindow=new BrowserWindow({width:1320,height:900,minWidth:900,minHeight:680,title:'Acadence',backgroundColor:'#eeebed',icon:iconFile,show:false,webPreferences:common});
   mainWindow.setMenuBarVisibility(false);secure(mainWindow);mainWindow.loadURL(appUrl);
   mainWindow.once('ready-to-show',()=>mainWindow.show());
   mainWindow.on('close',event=>{if(!quitting&&tray){event.preventDefault();mainWindow.hide();}});

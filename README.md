@@ -4,7 +4,9 @@ A personal Windows study planner with a floating white Shih Tzu companion with s
 
 ## Install and open
 
-Run **`release/Acadence-Setup-1.0.0.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, API key, or internet connection is needed.
+Run **`release/Acadence-Setup-1.1.1.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, API key, or internet connection is needed.
+
+Version 1.1 introduces a full claymorphism redesign: pearl-white surfaces, blush-pink controls, raised cards, inset fields, sculpted progress indicators, alongside the original illustrated white Shih Tzu with brown patches and a blue bandana. Dark mode uses charcoal-plum surfaces and rose accents. Keyboard focus and reduced-motion preferences remain supported. Installing over version 1.0 preserves local study records and settings.
 
 The installer is unsigned. Windows may show an unfamiliar-publisher or SmartScreen prompt. Only use the installer you built or obtained from a source you trust.
 
@@ -22,6 +24,8 @@ The unpacked app is also available at **`release/win-unpacked/Acadence.exe`**. K
 Once a plan exists, changes to topics, classes, availability, and breaks automatically replan upcoming unlocked sessions. Completed and missed records stay in history. Locked sessions are preserved; conflicts involving them are explicitly flagged for you to resolve.
 
 ## Sessions and the companion
+
+The companion is **Bunsoy**, a newly created white Shih Tzu with small brown patches and a blush-pink collar. Its transparent character artwork is bundled locally. Version 1.1.1 updates the previous companion name to Bunsoy once when opening older profiles or backups; study history and other preferences are preserved. You can still change the name in Settings afterward.
 
 ### Slide goals
 
@@ -81,6 +85,7 @@ npm run smoke           # desktop UI and offline OCR integration
 node scripts/lifecycle.mjs  # timer recovery, backup, restore, and reset
 node scripts/goals.mjs   # slide goals, partial completion, companion, backup
 node scripts/fullscreen.mjs # companion hides for fullscreen windows
+node scripts/clay-review.mjs # all pages in both themes at laptop and desktop sizes
 npm run dist            # Windows x64 NSIS installer
 ```
 

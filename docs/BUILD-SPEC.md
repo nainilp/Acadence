@@ -1,4 +1,4 @@
-# Acadence 1.0
+# Acadence 1.1
 
 Personal Windows desktop application and per-user installer. No account, cloud service, telemetry, or runtime network dependency. Store study history locally; allow backup/restore and complete reset in Settings.
 
@@ -18,7 +18,7 @@ Personal Windows desktop application and per-user installer. No account, cloud s
 Movable, illustrated white Shih Tzu with small brown patches. Separate transparent window, optional always-on-top, does not steal focus on prompts. Topic, slide range, timer, completion/pause and partial-slide controls. Minimize to tray, optional startup and sound, fullscreen hiding, reduced motion. Contextual local messages, no open-ended AI chat or voice.
 
 ## Interface
-Today, Week, Subjects, Availability, Timetable, Progress, Settings. Light and dark modes. Design: notebook-blue #EEF3FC, ink #192D4D, royal #3C64D8, mint #DFF3E9, paper #FFFFFF, slate #66758C. Segoe UI Variable for body/display, Georgia sparingly for welcome copy, Consolas for timer. Signature: a visible subject rotation ribbon connecting study sessions, with the dog as a quiet study partner. Motion only for short state feedback; no constant bouncing while studying.
+Today, Week, Subjects, Availability, Timetable, Progress, Settings. Full claymorphism treatment based on the user's off-white and pink reference: pearl #EEEBED, porcelain #F2EFF0, blush #E6A7B7, rose #9C435E, graphite #493D44, muted #76656F. Sculpted rounded surfaces, raised controls, inset fields, and a circular daily-progress indicator. Trebuchet MS headings, Segoe UI body, Consolas timer. The dog retains its original SVG illustration: white fur, brown patches, and a blue bandana. Claymorphism applies to the interface and app icon, never to the dog artwork. Dark mode uses charcoal-plum clay and rose accents. Focus outlines, selected-state markers, short-window layouts, and reduced motion preserve usability. Study data and scheduling behavior remain unchanged.
 
 ## Verification
 Node tests for rotation, conflicts, breaks, budgets, incomplete work, streaks and overdue sessions; Electron smoke test for local persistence and companion; bundled OCR test without network; production installer build and installed-app smoke test where supported.

@@ -1,6 +1,6 @@
 export const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 export const EFFORT = { light: 40, normal: 60, heavy: 90 };
-export const COLORS = ['#5274dc', '#299c84', '#b479c6', '#d7993f', '#dd7288', '#549cb8'];
+export const COLORS = ['#a84f70', '#6f7d66', '#87618c', '#a17a4a', '#b46363', '#637c87'];
 export const uid = () => globalThis.crypto.randomUUID();
 export function dateKey(value = new Date()) { const d = new Date(value); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 export function addDays(date, n) { const d = new Date(`${date}T12:00:00`); d.setDate(d.getDate()+n); return dateKey(d); }
@@ -12,7 +12,7 @@ export const minutesOf = s => { const [h,m]=s.split(':').map(Number); return h*6
 export const durationLabel = m => m >= 60 ? `${Math.floor(m/60)}h${m%60 ? ` ${Math.round(m%60)}m` : ''}` : `${Math.round(m)}m`;
 export function freshState() {
   return { version:1, subjects:[], topics:[], goals:[], sessions:[], classes:[], overrides:{}, rotation:0, active:null, notices:[],
-    settings:{ theme:'light', petName:'Mochi', petVisible:true, alwaysOnTop:true, hideFullscreen:true, sound:false, reducedMotion:false, startup:false, buffer:0,
+    settings:{ theme:'light', petName:'Bunsoy', companionRevision:1, petVisible:true, alwaysOnTop:true, hideFullscreen:true, sound:false, reducedMotion:false, startup:false, buffer:0,
       days:DAYS.map((_,i)=>({ slots:i<5?[[16*60,20*60]]:[[10*60,16*60]], budget:120, breakCount:1, breakMinutes:15 })) } };
 }
 export function mergeIntervals(intervals) {
@@ -172,6 +172,8 @@ export function streakInfo(state,now=Date.now()) {
 }
 export function validateState(s) {
   if(!s||s.version!==1||!Array.isArray(s.subjects)||!Array.isArray(s.topics)||!Array.isArray(s.sessions)||!Array.isArray(s.classes)||!s.settings||!Array.isArray(s.settings.days)||s.settings.days.length!==7||!s.overrides)throw Error('This is not a supported Acadence backup.');
+  // Apply the requested companion rename once when opening an older profile or backup.
+  if(s.settings.companionRevision==null){s.settings.petName='Bunsoy';s.settings.companionRevision=1;}
   const finite=(n,min,max)=>Number.isFinite(n)&&n>=min&&n<=max;
   const validDate=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&dateKey(new Date(d+'T12:00:00'))===d;
   s.goals??=[];
