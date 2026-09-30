@@ -3,7 +3,7 @@
 Personal Windows desktop application and per-user installer. No account, cloud service, telemetry, or runtime network dependency. Store study history locally; allow backup/restore and complete reset in Settings.
 
 ## Planning rules
-- Subject slide goals: name, total slides, starting slide, deadline, effort. Divide whole slide ranges across available sessions through the date; track partial progress and return unfinished ranges at the next subject turn. Preserve history and migrate older local backups.
+- Subject slide goals: name, total slides, starting slide, slides completed so far, deadline, effort. Divide whole slide ranges equally across available sessions through the date; record actual slides finished per block, including work ahead of the target, and automatically redistribute the remainder equally. Allow cumulative progress updates for outside study. Preserve history and migrate older local backups.
 - Ordered subjects and ordered topics. Rotate across subjects, continuing across days. Skip exhausted subjects.
 - Repeating availability selected on a weekly grid; daily study budgets exclude breaks. Date overrides supported.
 - School classes and manual commitments block time, with optional buffer. Confirm locally recognized timetable entries before saving; manual correction and period mappings cover ambiguous images.

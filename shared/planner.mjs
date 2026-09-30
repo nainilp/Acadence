@@ -65,8 +65,8 @@ export function generatePlan(state, week, now=Date.now()) {
     for(const session of fixed)notBefore=Math.max(notBefore,at(session.date,session.end));
     return {topic:t,notBefore,left:Math.max(0,(t.remaining??t.minutes??Math.max(30,Math.floor(EFFORT[t.effort]*scale/5)*5))-(reserved.get(t.id)||0))};
   }).filter(x=>x.left>0);
-    const goals=relevant.filter(t=>t.subjectId===sub.id&&t.goalId).map(t=>{const goal=(state.goals||[]).find(g=>g.id===t.goalId);return goal&&!goal.archived&&goal.completedSlides<goal.totalSlides?{topic:t,goal,notBefore:at(goal.startDate,0),deadline:at(addDays(goal.deadline,1),0),left:Infinity,target:goal.continuationMinutes||EFFORT[t.effort]}:null;}).filter(Boolean).sort((a,b)=>Number(!!b.goal.continuationMinutes)-Number(!!a.goal.continuationMinutes)||a.goal.deadline.localeCompare(b.goal.deadline));
-    return [...goals.filter(x=>x.goal.continuationMinutes),...ordinary,...goals.filter(x=>!x.goal.continuationMinutes)];
+    const goals=relevant.filter(t=>t.subjectId===sub.id&&t.goalId).map(t=>{const goal=(state.goals||[]).find(g=>g.id===t.goalId);return goal&&!goal.archived&&goal.completedSlides<goal.totalSlides?{topic:t,goal,notBefore:at(goal.startDate,0),deadline:at(addDays(goal.deadline,1),0),left:Infinity,target:EFFORT[t.effort]}:null;}).filter(Boolean).sort((a,b)=>a.goal.deadline.localeCompare(b.goal.deadline));
+    return [...ordinary,...goals];
   });
   let cursor=state.rotation%Math.max(1,queues.length);
   const planned=[];
@@ -133,7 +133,7 @@ export function startSession(state,id,now=Date.now()) {
   state.active={sessionId:id,elapsedMs:0,runningSince:now,targetMs:Math.max(1000,at(s.date,s.end)-now)};
   if(s.type==='study'){const idx=state.subjects.findIndex(sub=>sub.id===s.subjectId);state.rotation=(idx+1)%Math.max(1,state.subjects.length);}
 }
-export function finishSession(state,complete,extra=30,now=Date.now(),slidesCompleted=0) {
+export function finishSession(state,complete,extra=30,now=Date.now(),slidesCompleted) {
   const active=state.active;if(!active)throw Error('There is no active session.');
   const s=state.sessions.find(s=>s.id===active.sessionId), ms=elapsed(state,now);
   s.actualMinutes=Math.round(ms/60000*10)/10;s.status='completed';s.finishedAt=now;
@@ -143,11 +143,15 @@ export function finishSession(state,complete,extra=30,now=Date.now(),slidesCompl
   const goal=(state.goals||[]).find(g=>g.id===topic?.goalId);
   if(goal){
     const count=s.slideEnd-s.slideStart+1;
-    if(!Number.isInteger(slidesCompleted)||slidesCompleted<0||slidesCompleted>count)throw Error(`Enter a completed slide count between 0 and ${count}.`);
-    s.slidesCompleted=complete?count:slidesCompleted;
+    const remaining=goal.totalSlides-goal.completedSlides;
+    slidesCompleted??=complete?count:0;
+    if(!Number.isInteger(slidesCompleted)||slidesCompleted<0||slidesCompleted>remaining)throw Error(`Enter a completed slide count between 0 and ${remaining}.`);
+    s.slidesCompleted=slidesCompleted;
+    // Include any slides studied ahead of this block's target in its saved history.
+    s.slideEnd=Math.max(s.slideEnd,s.slideStart+slidesCompleted-1);
     goal.completedSlides=Math.min(goal.totalSlides,goal.completedSlides+s.slidesCompleted);
-    goal.continuationMinutes=complete?null:extra;
-    goal.continuationSlides=complete?0:count-s.slidesCompleted;
+    goal.continuationMinutes=null;
+    goal.continuationSlides=0;
     if(goal.completedSlides>=goal.totalSlides){goal.completedAt=now;goal.continuationMinutes=null;topic.status='done';topic.completedAt=now;state.sessions=state.sessions.filter(x=>x.topicId!==topic.id||x.status!=='planned');}
     state.active=null;return;
   }

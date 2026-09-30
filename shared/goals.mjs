@@ -13,15 +13,10 @@ export function allocateSlides(state,now=Date.now()) {
     const topic=state.topics.find(t=>t.goalId===goal.id);if(!topic)continue;
     const active=state.sessions.find(s=>s.topicId===topic.id&&s.status==='active');
     const activeCount=active?active.slideEnd-active.slideStart+1:0;
-    let remaining=Math.max(0,goal.totalSlides-goal.completedSlides-activeCount),continuationCount=0;
+    const remaining=Math.max(0,goal.totalSlides-goal.completedSlides-activeCount);
     let sessions=state.sessions.filter(s=>s.topicId===topic.id&&s.status==='planned').sort((a,b)=>a.date.localeCompare(b.date)||a.start-b.start);
     for(const s of sessions)if(s.date>goal.deadline||s.date<goal.startDate||goal.archived)remove.add(s.id);
     sessions=sessions.filter(s=>!remove.has(s.id));
-    if(!active&&goal.continuationSlides>0&&sessions.length>1&&remaining>0){
-      const first=sessions.shift();continuationCount=Math.min(remaining,goal.continuationSlides);
-      first.slideStart=goal.startSlide+goal.completedSlides;first.slideEnd=first.slideStart+continuationCount-1;first.goalId=goal.id;
-      remaining-=continuationCount;
-    }
     if(sessions.length>remaining){
       const keep=new Set();
       // Preserve as many locked blocks as the number of slides allows, then spread the rest over the horizon.
@@ -32,11 +27,11 @@ export function allocateSlides(state,now=Date.now()) {
       sessions=sessions.filter(s=>keep.has(s.id));
     }
     if(remaining&&!sessions.length&&!goal.archived){state.notices.push(`${goal.title}: ${remaining} slides have no study time before ${goal.deadline}. Add availability, reduce other work, or change the goal date.`);continue;}
-    const weight=sessions.reduce((a,s)=>a+s.end-s.start,0),extra=Math.max(0,remaining-sessions.length);
-    const allocations=sessions.map(s=>{const raw=weight?extra*(s.end-s.start)/weight:0;return {s,count:1+Math.floor(raw),fraction:raw-Math.floor(raw)};});
-    let rest=remaining-allocations.reduce((a,x)=>a+x.count,0);
-    for(const item of [...allocations].sort((a,b)=>b.fraction-a.fraction)){if(rest<=0)break;item.count++;rest--;}
-    let next=goal.startSlide+goal.completedSlides+activeCount+continuationCount;
+    // Whole slides are shared equally, regardless of block duration. Earlier blocks get the remainder.
+    const perBlock=sessions.length?Math.floor(remaining/sessions.length):0;
+    const remainder=sessions.length?remaining%sessions.length:0;
+    const allocations=sessions.map((s,i)=>({s,count:perBlock+(i<remainder?1:0)}));
+    let next=goal.startSlide+goal.completedSlides+activeCount;
     for(const item of allocations){item.s.slideStart=next;item.s.slideEnd=next+item.count-1;item.s.goalId=goal.id;next+=item.count;}
   }
   state.sessions=state.sessions.filter(s=>!remove.has(s.id));

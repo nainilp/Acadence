@@ -23,11 +23,15 @@ export function applyAction(original,action,now=Date.now()) {
       if(goal&&state.sessions.some(s=>s.goalId===goal.id&&s.status==='active'))throw Error('Check in on the active slide session before editing its goal.');
       if(goal&&totalSlides<goal.completedSlides)throw Error('The goal must include the slides you have already completed.');
       if(goal&&goal.completedSlides>0&&startSlide!==goal.startSlide)throw Error('Keep the starting slide unchanged after progress has been recorded.');
-      const values={title,subjectId:action.subjectId,totalSlides,startSlide,deadline:action.deadline,startDate:action.startDate||goal?.startDate||dateKey(now),effort:action.effort,archived:false};
-      if(goal)Object.assign(goal,values);else{goal={id:uid(),...values,completedSlides:0};state.goals.push(goal);}
+      const completedSlides=number(action.completedSlides??goal?.completedSlides??0,0,totalSlides);
+      if(!Number.isInteger(completedSlides))throw Error('Slide counts must be whole numbers.');
+      const values={title,subjectId:action.subjectId,totalSlides,startSlide,completedSlides,deadline:action.deadline,startDate:action.startDate||goal?.startDate||dateKey(now),effort:action.effort,archived:false,continuationMinutes:null,continuationSlides:0};
+      if(goal)Object.assign(goal,values);else{goal={id:uid(),...values};state.goals.push(goal);}
+      if(completedSlides===totalSlides)goal.completedAt??=now;else delete goal.completedAt;
       let topic=state.topics.find(t=>t.goalId===goal.id);
       const topicValues={subjectId:goal.subjectId,title:goal.title,goalId:goal.id,effort:goal.effort,minutes:null,week:monday(new Date(goal.startDate+'T12:00:00')),deadline:goal.deadline,status:goal.completedSlides>=goal.totalSlides?'done':'pending'};
-      if(topic)Object.assign(topic,topicValues);else state.topics.push({id:uid(),...topicValues});
+      if(topic)Object.assign(topic,topicValues);else{topic={id:uid(),...topicValues};state.topics.push(topic);}
+      if(completedSlides===totalSlides)topic.completedAt??=now;else delete topic.completedAt;
       break;
     }
     case 'archive-goal': {
@@ -57,7 +61,7 @@ export function applyAction(original,action,now=Date.now()) {
     case 'start': startSession(state,action.id,now);break;
     case 'pause': if(state.active){state.active.elapsedMs=elapsed(state,now);state.active.runningSince=null;state.active.pauseReason=action.reason||'Paused';}break;
     case 'resume': {if(!state.active)break;if(state.active.elapsedMs>=state.active.targetMs)throw Error('Session time is complete. Check in to finish or request more time.');const s=state.sessions.find(s=>s.id===state.active.sessionId);if(s.date!==dateKey(now))throw Error('This session is from a previous day. Finish it or stop and replan.');const min=Math.floor((now-new Date(`${s.date}T00:00:00`).getTime())/60000),remaining=Math.max(1,Math.ceil((state.active.targetMs-state.active.elapsedMs)/60000));const err=validatePlacement(state,{...s,start:min,end:min+remaining});if(err)throw Error(`${err} Stop and replan to find another time.`);state.active.runningSince=now;state.active.pauseReason=null;break;}
-    case 'finish': finishSession(state,!!action.complete,number(action.extra||30,5,2400),now,Number(action.slidesCompleted||0));break;
+    case 'finish': finishSession(state,!!action.complete,number(action.extra||30,5,2400),now,action.slidesCompleted==null?undefined:Number(action.slidesCompleted));break;
     case 'stop': {if(state.active){const s=state.sessions.find(s=>s.id===state.active.sessionId);s.status='skipped';s.missedAt||=now;s.actualMinutes=Math.round(elapsed(state,now)/60000*10)/10;state.active=null;generatePlan(state,monday(new Date(now)),now);}break;}
     case 'skip': {const s=state.sessions.find(s=>s.id===action.id);if(s&&['planned','missed'].includes(s.status)){s.status='skipped';if(s.type==='study')s.missedAt||=now;}break;}
     case 'tick': break;
