@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('acadence', {
   backup: () => ipcRenderer.invoke('backup:export'),
   restore: () => ipcRenderer.invoke('backup:restore'),
   clear: () => ipcRenderer.invoke('data:clear'),
+  updateStatus: () => ipcRenderer.invoke('updates:get'),
+  checkUpdates: () => ipcRenderer.invoke('updates:check'),
+  onUpdate: callback => { const fn=(_,value)=>callback(value);ipcRenderer.on('updates:state',fn);return ()=>ipcRenderer.removeListener('updates:state',fn); },
   window: command => ipcRenderer.invoke('window:command',command),
   dataLocation: () => ipcRenderer.invoke('data:location')
 });

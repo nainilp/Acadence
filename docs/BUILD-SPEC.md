@@ -1,6 +1,6 @@
 # Acadence 1.1
 
-Personal Windows desktop application and per-user installer. No account, cloud service, telemetry, or runtime network dependency. Store study history locally; allow backup/restore and complete reset in Settings.
+Personal Windows desktop application and per-user installer. No account, cloud study service, or telemetry. Studying works offline. Store study history locally; allow backup/restore and complete reset in Settings. Check GitHub for stable releases on launch and periodically; offer Update now / Not now, download only with consent, verify the installer, save and pause timers before installing and restarting. Settings supports manual checks and progress. Study renderers remain offline.
 
 ## Planning rules
 - Subject slide goals: name, total slides, starting slide, slides completed so far, deadline, effort. Divide whole slide ranges equally across available sessions through the date; record actual slides finished per block, including work ahead of the target, and automatically redistribute the remainder equally. Allow cumulative progress updates for outside study. Preserve history and migrate older local backups.

@@ -5,7 +5,7 @@ const {pathToFileURL}=require('node:url');
 const {spawn}=require('node:child_process');
 const testData=process.env.ACADENCE_DATA_DIR;
 if(testData)app.setPath('userData',path.resolve(testData));
-let state,core,actions,goals,mainWindow,petWindow,tray,quitting=false,fullHelper,fullScreen=false,queue=Promise.resolve(),lastPulse=Date.now(),lastCue='',lastCheckpoint=Date.now();
+let state,core,actions,goals,mainWindow,petWindow,tray,updates,installingUpdate=false,quitting=false,fullHelper,fullScreen=false,queue=Promise.resolve(),lastPulse=Date.now(),lastCue='',lastCheckpoint=Date.now();
 const dataFile=()=>path.join(app.getPath('userData'),'study-data.json');
 const iconFile=path.join(__dirname,'../assets/icon.png');
 const appUrl=pathToFileURL(path.join(__dirname,'../dist/index.html')).href;
@@ -13,7 +13,23 @@ function emit(channel,value){for(const w of BrowserWindow.getAllWindows())if(!w.
 async function persist(){const filename=dataFile();await fs.mkdir(path.dirname(filename),{recursive:true});const tmp=filename+'.tmp';await fs.writeFile(tmp,JSON.stringify(state,null,2),'utf8');await fs.rename(tmp,filename);}
 function enqueue(fn){const result=queue.then(fn);queue=result.catch(()=>{});return result;}
 function syncWindows(){if(petWindow){petWindow.setAlwaysOnTop(!!state.settings.alwaysOnTop,'screen-saver');if(state.settings.petVisible&&!(fullScreen&&state.settings.hideFullscreen))petWindow.showInactive();else petWindow.hide();}}
-async function perform(action,now=Date.now()){return enqueue(async()=>{const next=actions.applyAction(state,action,now);const previous=state;state=next;try{await persist();}catch(e){state=previous;throw e;}if(action.type==='settings'){if(!testData)app.setLoginItemSettings({openAtLogin:!!state.settings.startup});syncWindows();}emit('state:updated',state);return state;});}
+async function perform(action,now=Date.now()){if(installingUpdate)throw Error('Acadence is saving your study data for the update. Please wait.');return enqueue(async()=>{const next=actions.applyAction(state,action,now);const previous=state;state=next;try{await persist();}catch(e){state=previous;throw e;}if(action.type==='settings'){if(!testData)app.setLoginItemSettings({openAtLogin:!!state.settings.startup});syncWindows();}emit('state:updated',state);return state;});}
+function setupUpdates(){
+  if(!app.isPackaged||process.platform!=='win32')return;
+  const {autoUpdater}=require('electron-updater');
+  updates=require('./updates.cjs').createUpdateManager({
+    updater:autoUpdater,currentVersion:app.getVersion(),
+    onState:value=>emit('updates:state',value),
+    canPrompt:()=>!quitting&&!installingUpdate&&!state.active&&!fullScreen,
+    showDialog:options=>{if(mainWindow&&!mainWindow.isDestroyed()){mainWindow.show();mainWindow.focus();return dialog.showMessageBox(mainWindow,options);}return dialog.showMessageBox(options);},
+    prepareInstall:async()=>{
+      installingUpdate=true;
+      try{await enqueue(async()=>{if(state.active){state.active.elapsedMs=core.elapsed(state);state.active.runningSince=null;state.active.pauseReason='App updated — resume when ready';}await persist();emit('state:updated',state);});}
+      catch(error){installingUpdate=false;throw error;}
+    },
+    onInstallFailure:()=>{installingUpdate=false;}
+  });
+}
 function secure(w){w.webContents.setWindowOpenHandler(()=>({action:'deny'}));w.webContents.on('will-navigate',(e,url)=>{if(!url.startsWith(appUrl))e.preventDefault();});}
 function createWindows(){
   const common={preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true};
@@ -36,6 +52,8 @@ function registerIpc(){
   handle('state:get',()=>state);
   handle('state:action',(_,action)=>{if(!action||typeof action.type!=='string'||action.type==='reset')throw Error('Invalid action.');return perform(action);});
   handle('data:location',()=>app.getPath('userData'));
+  handle('updates:get',()=>updates?.get()||{status:'unsupported',message:'Updates are available in the installed Windows app.'});
+  handle('updates:check',()=>updates?.check(true)||{status:'unsupported',message:'Updates are available in the installed Windows app.'});
   handle('window:command',(event,command)=>{if(command==='open'){mainWindow.show();mainWindow.focus();}else if(command==='hide-pet')return perform({type:'settings',values:{petVisible:false}});else if(command==='pointer-on'&&event.sender.id===petWindow.webContents.id)petWindow.setIgnoreMouseEvents(false);else if(command==='pointer-off'&&event.sender.id===petWindow.webContents.id)petWindow.setIgnoreMouseEvents(true,{forward:true});else if(command==='quit')app.quit();});
   handle('ocr:read',async(_,data)=>{if(typeof data!=='string'||data.length>30*1024*1024||!/^data:image\/(png|jpeg|webp|bmp);base64,/.test(data))throw Error('Choose a PNG, JPEG, WebP, or BMP image under 20 MB.');const buffer=Buffer.from(data.split(',')[1],'base64');return require('./ocr.cjs').read(buffer,progress=>emit('ocr:progress',{status:progress.status,progress:progress.progress}));});
   handle('backup:export',async()=>{const result=await dialog.showSaveDialog(mainWindow,{title:'Export Acadence backup',defaultPath:`Acadence-backup-${core.dateKey()}.json`,filters:[{name:'Acadence backup',extensions:['json']}]});if(result.canceled)return false;await fs.writeFile(result.filePath,JSON.stringify(state,null,2),'utf8');return true;});
@@ -43,6 +61,7 @@ function registerIpc(){
   handle('data:clear',async()=>{const result=await dialog.showMessageBox(mainWindow,{type:'warning',buttons:['Cancel','Clear all data'],defaultId:0,cancelId:0,message:'Clear all Acadence data?',detail:'This permanently removes your subjects, timetable, study history, streaks, and settings. Export a backup first if you want to keep them. Backups you saved elsewhere are not removed.'});if(result.response!==1)return false;await perform({type:'reset'});await fs.rm(path.join(app.getPath('userData'),'study-data-recovery.json'),{force:true});if(!testData)app.setLoginItemSettings({openAtLogin:false});syncWindows();return true;});
 }
 async function pulse(){
+  if(installingUpdate)return;
   const now=Date.now(),gap=now-lastPulse;lastPulse=now;
   if(state.active?.runningSince&&gap>15000){await perform({type:'pause',reason:'Your laptop was asleep or the app was interrupted'},now-gap);notify('Welcome back','Your timer is paused. Resume when you are ready.');}
   if(state.sessions.some(s=>core.isOverdue(s,now)))await perform({type:'tick'});
@@ -56,10 +75,15 @@ async function boot(){
   core=await import('../shared/planner.mjs');actions=await import('../shared/actions.mjs');goals=await import('../shared/goals.mjs');
   try{state=core.validateState(JSON.parse(await fs.readFile(dataFile(),'utf8')));}catch(e){state=core.freshState();if(e.code!=='ENOENT'){await dialog.showMessageBox({type:'warning',message:'Acadence could not read the saved data.',detail:'The original file will be preserved as study-data-recovery.json. You can restore a backup in Settings.'});await fs.copyFile(dataFile(),path.join(app.getPath('userData'),'study-data-recovery.json')).catch(()=>{});}}
   if(state.active){state.active.runningSince=null;state.active.pauseReason='App restarted — resume when ready';}core.reconcile(state);await persist();
-  // There are no runtime remote endpoints. Block renderer network requests explicitly.
+  // Study renderers stay offline. The main-process updater uses its own network session.
   session.defaultSession.webRequest.onBeforeRequest({urls:['http://*/*','https://*/*','ws://*/*','wss://*/*']},(_,callback)=>callback({cancel:true}));
   session.defaultSession.setPermissionRequestHandler((_,__,callback)=>callback(false));
-  registerIpc();createWindows();
+  setupUpdates();registerIpc();createWindows();
+  if(updates&&!testData){
+    setTimeout(()=>updates.check().catch(console.error),10000).unref();
+    setInterval(()=>updates.check().catch(console.error),6*60*60*1000).unref();
+    setInterval(()=>updates.promptPending().catch(console.error),30000).unref();
+  }
   powerMonitor.on('suspend',()=>{if(state.active)perform({type:'pause',reason:'Laptop asleep'}).catch(console.error);});
   powerMonitor.on('lock-screen',()=>{if(state.active)perform({type:'pause',reason:'Screen locked'}).catch(console.error);});
   setInterval(()=>pulse().catch(console.error),1000);

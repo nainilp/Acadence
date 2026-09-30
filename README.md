@@ -4,9 +4,13 @@ A personal Windows study planner with a floating white Shih Tzu companion with s
 
 ## Install and open
 
-Run **`release/Acadence-Setup-1.1.2.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, API key, or internet connection is needed.
+Run **`release/Acadence-Setup-1.1.3.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, or API key is needed. Studying works offline; update checks require an internet connection.
 
-Version 1.1.2 adds equal slide allocation across study blocks and automatic redistribution after recording actual progress, including slides studied ahead and outside the app. To update an installed copy, choose **Quit Acadence** from its system-tray menu, then run the newest installer from [GitHub Releases](https://github.com/nainilp/Acadence/releases) using the same installation location. Existing study data and settings are preserved. Updates are currently manual.
+Version 1.1.2 adds equal slide allocation across study blocks and automatic redistribution after recording actual progress, including slides studied ahead and outside the app.
+
+Version 1.1.3 checks [GitHub Releases](https://github.com/nainilp/Acadence/releases) on launch and every six hours while open. A newer stable release offers **Update now** or **Not now**. Update now downloads and verifies the installer, saves study data, pauses any running timer, then installs and restarts. Not now skips that version’s automatic prompts until the next launch. Automatic prompts wait until the active study session and any fullscreen activity end. **Settings → App updates → Check for updates** checks manually, shows download progress, and can offer a declined update again. Offline checks never prevent studying.
+
+People running 1.1.2 or earlier need to install 1.1.3 once manually: choose **Quit Acadence** from the system-tray menu, then run the newest installer using the same installation location. Existing study data and settings are preserved. Future releases can be installed from the update dialog.
 
 Version 1.1 introduces a full claymorphism redesign: pearl-white surfaces, blush-pink controls, raised cards, inset fields, sculpted progress indicators, alongside the original illustrated white Shih Tzu with brown patches and a blue bandana. Dark mode uses charcoal-plum surfaces and rose accents. Keyboard focus and reduced-motion preferences remain supported. Installing over version 1.0 preserves local study records and settings.
 
@@ -60,7 +64,7 @@ The exact data folder is displayed in **Settings**. Study data lives in `study-d
 
 **Export backup** saves all subjects, schedules, history, and settings to a JSON file. **Restore backup** validates the selected file and asks before replacing current data. **Clear all data** requires confirmation and resets the app, including any internal recovery file; exported backups elsewhere are intentionally kept.
 
-Timetable images are processed in memory and not saved as part of study history. The app bundles Tesseract and English recognition data; it does not download a model or send images to a server. There is no telemetry or remote API. Renderer network access is blocked.
+Timetable images are processed in memory and not saved as part of study history. The app bundles Tesseract and English recognition data; it does not download a model or send images to a server. There is no telemetry. Update checks contact GitHub and downloads use GitHub’s release hosting. Study records are never uploaded. Renderer network access is blocked; the main-process updater uses a separate network session.
 
 ## Timetable recognition limits
 
@@ -86,6 +90,8 @@ npm run build           # production renderer
 npm run smoke           # desktop UI and offline OCR integration
 node scripts/lifecycle.mjs  # timer recovery, backup, restore, and reset
 node scripts/goals.mjs   # slide goals, partial completion, companion, backup
+node scripts/updates.mjs # packaged update UI, consent, progress, and save-before-install
+node scripts/updates-live.mjs # real GitHub check/download, installer launch intercepted
 node scripts/fullscreen.mjs # companion hides for fullscreen windows
 node scripts/clay-review.mjs # all pages in both themes at laptop and desktop sizes
 npm run dist            # Windows x64 NSIS installer
@@ -94,6 +100,8 @@ npm run dist            # Windows x64 NSIS installer
 The Electron integration tests use fresh `.test-data/` profiles and do not touch your real study records. Screenshots and test reports go to `test-results/`. You can set `ACADENCE_EXECUTABLE` to a packaged or installed `Acadence.exe` to run those same tests against the actual distribution.
 
 Build outputs, dependencies, local test data, and logs are ignored by Git. Commit the source, `package-lock.json`, and the bundled custom artwork in `assets/`.
+
+For each GitHub release, use a new version and a matching tag, and upload the installer, its `.blockmap`, and `latest.yml` from the same build. The updater reads `latest.yml` and verifies the downloaded installer’s checksum. The build command creates these files without publishing them automatically.
 
 ## Reference documentation
 
