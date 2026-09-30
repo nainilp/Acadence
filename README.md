@@ -4,7 +4,9 @@ A personal Windows study planner with a floating white Shih Tzu companion with s
 
 ## Install and open
 
-Run **`release/Acadence-Setup-1.1.1.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, API key, or internet connection is needed.
+Run **`release/Acadence-Setup-1.1.2.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, API key, or internet connection is needed.
+
+Version 1.1.2 adds equal slide allocation across study blocks and automatic redistribution after recording actual progress, including slides studied ahead and outside the app. To update an installed copy, choose **Quit Acadence** from its system-tray menu, then run the newest installer from [GitHub Releases](https://github.com/nainilp/Acadence/releases) using the same installation location. Existing study data and settings are preserved. Updates are currently manual.
 
 Version 1.1 introduces a full claymorphism redesign: pearl-white surfaces, blush-pink controls, raised cards, inset fields, sculpted progress indicators, alongside the original illustrated white Shih Tzu with brown patches and a blue bandana. Dark mode uses charcoal-plum surfaces and rose accents. Keyboard focus and reduced-motion preferences remain supported. Installing over version 1.0 preserves local study records and settings.
 

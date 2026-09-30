@@ -1,9 +1,10 @@
 import {_electron as electron} from '@playwright/test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import {dateKey,addDays} from '../shared/planner.mjs';
 const root=process.cwd(),dataPath=path.join(root,'.test-data',`goals-${Date.now()}`);
+const {version}=JSON.parse(await readFile(path.join(root,'package.json'),'utf8'));
 function verifySlides(state){for(const goal of state.goals){const blocks=state.sessions.filter(s=>s.goalId===goal.id&&s.status==='planned'),counts=blocks.map(s=>s.slideEnd-s.slideStart+1);assert.ok(Math.max(...counts)-Math.min(...counts)<=1);assert.equal(counts.reduce((a,b)=>a+b,0),goal.totalSlides-goal.completedSlides);}}
 await mkdir('test-results',{recursive:true});
 const app=await electron.launch({...(process.env.ACADENCE_EXECUTABLE?{executablePath:process.env.ACADENCE_EXECUTABLE,args:[]}:{args:['.']}),cwd:root,env:{...process.env,ACADENCE_DATA_DIR:dataPath}}),errors=[];
@@ -12,6 +13,7 @@ try{
   await app.firstWindow();let page;
   for(let i=0;i<100;i++){page=app.windows().find(w=>w.url().includes('index.html')&&!w.url().includes('pet=1'));if(page)break;await new Promise(r=>setTimeout(r,100));}
   await page.waitForSelector('.app-shell');
+  assert.equal(await app.evaluate(({app})=>app.getVersion()),version,'Packaged app version matches the source version');
   await page.evaluate(async()=>{const api=window.acadence;await api.action({type:'subject',name:'Biology'});await api.action({type:'subject',name:'Mathematics'});const s=await api.get();await api.action({type:'settings',values:{days:s.settings.days.map(d=>({...d,slots:[[0,1440]],budget:120,breakCount:0}))}});});
   await page.getByRole('button',{name:'Subjects & topics',exact:true}).click();
   for(let i=0;i<2;i++){
@@ -61,6 +63,8 @@ try{
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});dialog.showMessageBox=async()=>({response:1});},backup);
   await page.evaluate(()=>window.acadence.backup());await page.evaluate(()=>window.acadence.clear());await page.evaluate(()=>window.acadence.restore());
   s=await page.evaluate(()=>window.acadence.get());assert.deepEqual(s.goals.map(g=>g.completedSlides),[20,ahead]);verifySlides(s);assert.equal(errors.length,0,errors.join('\n'));
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  assert.ok((await page.locator('.version-note').innerText()).startsWith(`Acadence ${version} ·`),'Settings shows the packaged app version');
   await writeFile('test-results/goals-report.json',JSON.stringify({passed:true,goalCreation:true,equalSlideCounts:true,calendarRanges:true,partialCompletion:true,aheadOfTarget:true,companionCheckIn:true,outsideProgress:true,backupRestore:true,rendererErrors:errors},null,2));
   console.log('Slide goals passed: equal counts, ranges, partial and ahead progress, companion check-in, outside progress, backup/restore.');
 }finally{await app.close();}
