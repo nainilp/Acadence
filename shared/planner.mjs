@@ -11,7 +11,7 @@ export const timeLabel = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${Str
 export const minutesOf = s => { const [h,m]=s.split(':').map(Number); return h*60+m; };
 export const durationLabel = m => m >= 60 ? `${Math.floor(m/60)}h${m%60 ? ` ${Math.round(m%60)}m` : ''}` : `${Math.round(m)}m`;
 export function freshState() {
-  return { version:1, subjects:[], topics:[], goals:[], sessions:[], classes:[], overrides:{}, rotation:0, active:null, notices:[],
+  return { version:1, subjects:[], topics:[], goals:[], sessions:[], classes:[], overrides:{}, rotation:0, active:null, working:null, notices:[],
     settings:{ theme:'light', petName:'Bunsoy', companionRevision:1, petVisible:true, alwaysOnTop:true, hideFullscreen:true, sound:false, reducedMotion:false, startup:false, buffer:0,
       days:DAYS.map((_,i)=>({ slots:i<5?[[16*60,20*60]]:[[10*60,16*60]], budget:120, breakCount:1, breakMinutes:15 })) } };
 }
@@ -25,14 +25,19 @@ export function subtract(intervals, blocks) {
   for(const [a,b] of blocks) out=out.flatMap(([s,e])=>b<=s||a>=e?[[s,e]]:[[s,Math.min(e,a)],[Math.max(s,b),e]].filter(([x,y])=>y>x));
   return out;
 }
-export const configFor = (state,date) => state.overrides[date] || state.settings.days[dayIndex(date)];
+export function configFor(state,date) {
+  const cfg=state.overrides[date] || state.settings.days[dayIndex(date)];
+  // Start working is an explicit indication that the user is available now.
+  // Keep this temporary availability separate from their recurring schedule.
+  return state.working?.date===date?{...cfg,slots:mergeIntervals([...cfg.slots,[state.working.start,1440]])}:cfg;
+}
 export function blockedFor(state,date) { return state.classes.filter(c=>c.date?c.date===date:c.day===dayIndex(date)).map(c=>[Math.max(0,c.start-state.settings.buffer),Math.min(1440,c.end+state.settings.buffer)]); }
 export function availableFor(state,date) { return subtract(configFor(state,date).slots,blockedFor(state,date)); }
 const budgetCost=s=>s.type!=='study'?0:['planned','active'].includes(s.status)?s.end-s.start:(s.actualMinutes||0);
-export function isOverdue(s,now=Date.now()) { return s.type==='study'&&s.status==='planned'&&now>at(s.date,s.start)+10*60000; }
+export function isOverdue(s,now=Date.now(),state) { return !(state?.working?.date===s.date&&!s.locked)&&s.type==='study'&&s.status==='planned'&&now>at(s.date,s.start)+10*60000; }
 export function reconcile(state,now=Date.now()) {
   let changed=false;
-  for(const s of state.sessions) if(isOverdue(s,now)) {s.status='missed';s.missedAt=now;changed=true;}
+  for(const s of state.sessions) if(isOverdue(s,now,state)) {s.status='missed';s.missedAt=now;changed=true;}
   return changed;
 }
 export function elapsed(state,now=Date.now()) { const a=state.active; return a ? a.elapsedMs+(a.runningSince?Math.max(0,now-a.runningSince):0) : 0; }
@@ -73,6 +78,10 @@ export function generatePlan(state, week, now=Date.now()) {
   const next=time=>{for(let n=0;n<queues.length;n++){const i=(cursor+n)%queues.length;queues[i]=queues[i].filter(x=>!x.goal||x.deadline>time);if(queues[i][0]?.goal&&queues[i][0].notBefore>time){const ready=queues[i].findIndex(x=>x.notBefore<=time);if(ready>0)queues[i].unshift(...queues[i].splice(ready,1));}if(queues[i].length&&queues[i][0].notBefore<=time)return {i,item:queues[i][0]};}return null;};
   for(const day of dayData){
     let used=0,breaks=0,sinceBreak=0;
+    if(state.working?.date===day.date){
+      const lastBreak=Math.max(state.working.startedAt,...day.preserved.filter(s=>s.type==='break'&&s.status==='completed').map(s=>s.finishedAt||0));
+      sinceBreak=day.preserved.filter(s=>s.type==='study'&&s.status==='completed'&&s.finishedAt>=lastBreak).reduce((sum,s)=>sum+(s.originalEnd??s.end)-(s.originalStart??s.start),0);
+    }
     const target=Math.max(30,Math.floor(day.budget/(day.breaks+1)));
     for(const [start,end] of day.intervals){
       let pos=start;
@@ -164,10 +173,10 @@ export function finishSession(state,complete,extra=30,now=Date.now(),slidesCompl
   else if(topic){state.notices=state.notices.filter(n=>!n.startsWith(`${topic.title}:`));state.overflow=(state.overflow||[]).filter(o=>o.topicId!==topic.id);}
 }
 export function streakInfo(state,now=Date.now()) {
-  const today=dateKey(now), days=[...new Set(state.sessions.filter(s=>s.type==='study'&&s.date<=today).map(s=>s.date))].sort();
+  const today=dateKey(now), days=[...new Set(state.sessions.filter(s=>s.type==='study'&&s.status!=='stopped'&&s.date<=today).map(s=>s.date))].sort();
   let current=0,best=0;
   const history=[];
-  for(const date of days){const sessions=state.sessions.filter(s=>s.type==='study'&&s.date===date);const failed=sessions.some(s=>s.missedAt||['missed','skipped'].includes(s.status)||(s.status==='completed'&&!s.attended)||(date<today&&s.status!=='completed'));
+  for(const date of days){const sessions=state.sessions.filter(s=>s.type==='study'&&s.status!=='stopped'&&s.date===date);const failed=sessions.some(s=>s.missedAt||['missed','skipped'].includes(s.status)||(s.status==='completed'&&!s.attended)||(date<today&&s.status!=='completed'));
     const success=!failed&&sessions.every(s=>s.status==='completed'&&s.attended);
     if(failed)current=0;else if(success){current++;best=Math.max(best,current);}
     history.push({date,status:failed?'missed':success?'complete':'pending'});
@@ -181,6 +190,8 @@ export function validateState(s) {
   const finite=(n,min,max)=>Number.isFinite(n)&&n>=min&&n<=max;
   const validDate=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&dateKey(new Date(d+'T12:00:00'))===d;
   s.goals??=[];
+  s.working??=null;
+  if(s.working&&(!validDate(s.working.date)||!finite(s.working.startedAt,0,9999999999999)||!Number.isInteger(s.working.start)||!finite(s.working.start,0,1439)||!Number.isInteger(s.working.completedBlocks)||s.working.completedBlocks<0))throw Error('The working session is invalid.');
   if(!Array.isArray(s.goals))throw Error('Slide goals are invalid.');
   for(const g of s.goals){if(!EFFORT[g.effort]||typeof g.archived!=='boolean'||(g.continuationMinutes!=null&&!finite(g.continuationMinutes,5,2400))||(g.continuationSlides!=null&&(!Number.isInteger(g.continuationSlides)||!finite(g.continuationSlides,0,100000))))throw Error('Slide goal progress is invalid.');if(s.topics.filter(t=>t.goalId===g.id&&t.subjectId===g.subjectId).length!==1)throw Error('A slide goal is missing its study topic.');}
   for(const g of s.goals)if(typeof g.id!=='string'||typeof g.title!=='string'||!s.subjects.some(sub=>sub.id===g.subjectId)||!validDate(g.startDate)||!validDate(g.deadline)||g.startDate>g.deadline||!Number.isInteger(g.totalSlides)||!finite(g.totalSlides,1,100000)||!Number.isInteger(g.completedSlides)||!finite(g.completedSlides,0,g.totalSlides)||!Number.isInteger(g.startSlide)||!finite(g.startSlide,1,100000))throw Error('A slide goal has invalid details.');
@@ -195,7 +206,7 @@ export function validateState(s) {
   for(const t of s.topics)if(typeof t.title!=='string'||!s.subjects.some(x=>x.id===t.subjectId)||!EFFORT[t.effort]||!validDate(t.week)||(t.deadline&&!validDate(t.deadline))||!['pending','done'].includes(t.status)||(t.minutes!=null&&!finite(t.minutes,5,2400))||(t.remaining!=null&&!finite(t.remaining,5,2400)))throw Error('Topic details are invalid.');
   for(const row of [...s.classes,...s.sessions])if(!finite(row.start,0,1439)||!finite(row.end,1,1440)||row.end<=row.start)throw Error('A schedule entry has invalid times.');
   for(const c of s.classes)if(typeof c.name!=='string'||!Number.isInteger(c.day)||c.day<0||c.day>6||(c.date&&!validDate(c.date)))throw Error('A class has invalid details.');
-  for(const row of s.sessions)if(!validDate(row.date)||!['study','break'].includes(row.type)||!['planned','active','completed','missed','skipped'].includes(row.status)||(row.type==='study'&&(!s.topics.some(t=>t.id===row.topicId)||!s.subjects.some(sub=>sub.id===row.subjectId))))throw Error('A session has invalid details.');
+  for(const row of s.sessions)if(!validDate(row.date)||!['study','break'].includes(row.type)||!['planned','active','completed','missed','skipped','stopped'].includes(row.status)||(row.type==='study'&&(!s.topics.some(t=>t.id===row.topicId)||!s.subjects.some(sub=>sub.id===row.subjectId))))throw Error('A session has invalid details.');
   for(const row of s.sessions){if(row.goalId&&(!s.goals.some(g=>g.id===row.goalId)||!s.topics.some(t=>t.id===row.topicId&&t.goalId===row.goalId)||!Number.isInteger(row.slideStart)||!Number.isInteger(row.slideEnd)||row.slideStart<1||row.slideEnd<row.slideStart||(row.slidesCompleted!=null&&(!Number.isInteger(row.slidesCompleted)||!finite(row.slidesCompleted,0,row.slideEnd-row.slideStart+1)))))throw Error('A slide session has invalid progress.');}
   if(s.active&&!s.sessions.some(x=>x.id===s.active.sessionId))throw Error('The active session is missing.');
   if(s.active&&(!finite(s.active.elapsedMs,0,86400000)||!finite(s.active.targetMs,1,86400000)||(s.active.runningSince!==null&&!finite(s.active.runningSince,0,9999999999999))))throw Error('The active timer is invalid.');

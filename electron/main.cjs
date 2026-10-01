@@ -64,7 +64,7 @@ async function pulse(){
   if(installingUpdate)return;
   const now=Date.now(),gap=now-lastPulse;lastPulse=now;
   if(state.active?.runningSince&&gap>15000){await perform({type:'pause',reason:'Your laptop was asleep or the app was interrupted'},now-gap);notify('Welcome back','Your timer is paused. Resume when you are ready.');}
-  if(state.sessions.some(s=>core.isOverdue(s,now)))await perform({type:'tick'});
+  if(state.sessions.some(s=>core.isOverdue(s,now,state)))await perform({type:'tick'});
   const active=state.active;
   if(active&&core.elapsed(state,now)>=active.targetMs){const key=active.sessionId+'end';if(lastCue!==key){lastCue=key;await perform({type:'pause',reason:'Session time is complete'});const s=state.sessions.find(s=>s.id===active.sessionId);notify('Time to check in',s?.goalId?'Did you finish this slide block? Record your progress so I can adjust your plan.':'Did you finish your topic? Choose Finished or Need more time.');}}
   else if(!active){const s=state.sessions.find(s=>s.status==='planned'&&s.date===core.dateKey(now)&&core.at(s.date,s.start)<=now&&core.at(s.date,s.end)>now);if(s&&lastCue!==s.id){lastCue=s.id;notify(s.type==='break'?'Take a breather':'Your next study session is ready',s.type==='break'?'Step away for a moment. Your plan will be here.':goals.sessionTitle(state,s));}}

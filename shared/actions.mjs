@@ -1,9 +1,11 @@
 import { uid, freshState, validateState, reconcile, generatePlan, startSession, finishSession, elapsed, monday, dateKey, addDays, validatePlacement, COLORS } from './planner.mjs';
 import {planGoals,allocateSlides} from './goals.mjs';
+import {startWorking,finishBlock,stopWorking,advanceWorking} from './working.mjs';
 const text=(s,max=200)=>String(s||'').trim().slice(0,max);
 const number=(n,min,max)=>{n=Number(n);if(!Number.isFinite(n)||n<min||n>max)throw Error(`Enter a number between ${min} and ${max}.`);return n;};
 export function applyAction(original,action,now=Date.now()) {
   const state=structuredClone(original);state.goals??=[];reconcile(state,now);
+  if(['finish','finish-block'].includes(action.type)&&action.sessionId&&action.sessionId!==state.active?.sessionId)throw Error('This block has already changed. Check your current block before saving progress.');
   switch(action.type){
     case 'subject': {
       const name=text(action.name,60);if(!name)throw Error('Give the subject a name.');
@@ -59,15 +61,19 @@ export function applyAction(original,action,now=Date.now()) {
     case 'move': {const s=state.sessions.find(s=>s.id===action.id);if(!s||s.status!=='planned')throw Error('Only upcoming sessions can be changed. Missed records are kept.');const next={...s,date:action.date||s.date,start:Number(action.start??s.start),end:Number(action.end??s.end),locked:action.locked??true};if(new Date(`${next.date}T00:00:00`).getTime()+next.start*60000<now)throw Error('Choose a future time.');const error=validatePlacement(state,next);if(error)throw Error(error);Object.assign(s,next);break;}
     case 'lock': {const s=state.sessions.find(s=>s.id===action.id);if(s?.status==='planned')s.locked=!s.locked;break;}
     case 'start': startSession(state,action.id,now);break;
+    case 'start-working': startWorking(state,now);break;
+    case 'finish-block': finishBlock(state,action,now);break;
+    case 'stop-working': stopWorking(state,now);break;
     case 'pause': if(state.active){state.active.elapsedMs=elapsed(state,now);state.active.runningSince=null;state.active.pauseReason=action.reason||'Paused';}break;
     case 'resume': {if(!state.active)break;if(state.active.elapsedMs>=state.active.targetMs)throw Error('Session time is complete. Check in to finish or request more time.');const s=state.sessions.find(s=>s.id===state.active.sessionId);if(s.date!==dateKey(now))throw Error('This session is from a previous day. Finish it or stop and replan.');const min=Math.floor((now-new Date(`${s.date}T00:00:00`).getTime())/60000),remaining=Math.max(1,Math.ceil((state.active.targetMs-state.active.elapsedMs)/60000));const err=validatePlacement(state,{...s,start:min,end:min+remaining});if(err)throw Error(`${err} Stop and replan to find another time.`);state.active.runningSince=now;state.active.pauseReason=null;break;}
-    case 'finish': finishSession(state,!!action.complete,number(action.extra||30,5,2400),now,action.slidesCompleted==null?undefined:Number(action.slidesCompleted));break;
-    case 'stop': {if(state.active){const s=state.sessions.find(s=>s.id===state.active.sessionId);s.status='skipped';s.missedAt||=now;s.actualMinutes=Math.round(elapsed(state,now)/60000*10)/10;state.active=null;generatePlan(state,monday(new Date(now)),now);}break;}
+    case 'finish': if(state.working)finishBlock(state,action,now);else finishSession(state,!!action.complete,number(action.extra||30,5,2400),now,action.slidesCompleted==null?undefined:Number(action.slidesCompleted));break;
+    case 'stop': stopWorking(state,now);break;
     case 'skip': {const s=state.sessions.find(s=>s.id===action.id);if(s&&['planned','missed'].includes(s.status)){s.status='skipped';if(s.type==='study')s.missedAt||=now;}break;}
-    case 'tick': break;
+    case 'tick': advanceWorking(state,now);break;
     case 'reset': return freshState();
     default: throw Error('Unknown action.');
   }
+  if(['start-working','finish-block','stop-working','stop'].includes(action.type)||(action.type==='finish'&&original.working))return validateState(state);
   const affectsPlan=['topic','remove-topic','reorder-topic','reorder-subject','copy-topics','classes','remove-class','override','stop'].includes(action.type)||(action.type==='finish'&&!action.complete)||(action.type==='settings'&&(action.values.days!==undefined||action.values.buffer!==undefined));
   const finishedGoal=action.type==='finish'&&original.topics.find(t=>t.id===original.sessions.find(s=>s.id===original.active?.sessionId)?.topicId)?.goalId;
   validateState(state);

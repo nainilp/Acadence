@@ -25,7 +25,15 @@ The unpacked app is also available at **`release/win-unpacked/Acadence.exe`**. K
 3. Open **Availability**. Click or drag over the half-hour grid to mark times you are available. Enter study minutes, number of breaks, and break length for each day. Study budgets exclude breaks. Date overrides and buffers around classes are supported.
 4. Open **School timetable** and choose a timetable photo, or enter classes and other commitments manually. Everything is read locally. Check the proposed entries, correct them, and confirm them before saving.
 5. Open **Your week** and choose **Build / replan week**. Review any planning notes about deadlines, unavailable time, or work that did not fit.
-6. Open **Today**, or click your desktop companion, to start a study session. Sessions are never marked finished automatically.
+6. Open **Today**, or click your desktop companion, and choose **Start working**. Acadence divides the remaining work into blocks and starts the first one. You do not need to build a plan first.
+
+### Working through blocks
+
+**Start working** uses your time now without changing recurring availability. It keeps your daily study budget, breaks, classes, and locked sessions in mind. The current block shows its topic or exact slide range, with the next blocks listed below it. If a class or a locked block prevents an immediate start, the app waits until that time is free.
+
+Choose **Done block & next** in Today or on your companion to save the assigned work and start the next block automatically. Long topics stay unfinished until all of their blocks are done. For slide goals, this records the whole displayed slide range. Use **Record partial progress** in Today, or the companion’s slide-count field / **Need more time** control, to report less or more work instead. Breaks advance with **End break & continue**. Timers never mark work done automatically.
+
+Choose **Stop working** at any time. Time spent and completed blocks stay in history; unreported slides stay unfinished. The remaining work is replanned around your regular availability, including future weeks when necessary. Stopping is recorded separately from skipping a scheduled session. Choose **Start working** again whenever you are ready to continue.
 
 Once a plan exists, changes to topics, classes, availability, and breaks automatically replan upcoming unlocked sessions. Completed and missed records stay in history. Locked sessions are preserved; conflicts involving them are explicitly flagged for you to resolve.
 
