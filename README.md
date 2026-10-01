@@ -4,7 +4,9 @@ A personal Windows study planner with a floating white Shih Tzu companion with s
 
 ## Install and open
 
-Run **`release/Acadence-Setup-1.1.4.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, or API key is needed. Studying works offline; update checks require an internet connection.
+Run **`release/Acadence-Setup-1.1.5.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, or API key is needed. Studying works offline; update checks require an internet connection.
+
+Version 1.1.5 fixes Start working when less than 30 minutes remain in the day and shows an actionable message when a budget or goal date prevents starting. Resuming a paused working block now adjusts upcoming unlocked blocks without counting paused time as work. The desktop button audit covers 93 interactions.
 
 Version 1.1.4 adds **Start working**, automatic block progression from the app or companion, partial-progress check-ins, and **Stop working** to save progress and replan unfinished work.
 
@@ -31,7 +33,7 @@ The unpacked app is also available at **`release/win-unpacked/Acadence.exe`**. K
 
 ### Working through blocks
 
-**Start working** uses your time now without changing recurring availability. It keeps your daily study budget, breaks, classes, and locked sessions in mind. The current block shows its topic or exact slide range, with the next blocks listed below it. If a class or a locked block prevents an immediate start, the app waits until that time is free.
+**Start working** uses your time now without changing recurring availability. It keeps your daily study budget, breaks, classes, and locked sessions in mind. When less than a full block fits, it starts a shorter block, including late at night. If no work can start because of a budget, goal date, or commitment, it explains what to change instead of reporting a successful start. The current block shows its topic or exact slide range, with the next blocks listed below it. If a class or a locked block prevents an immediate start, the app waits until that time is free.
 
 Choose **Done block & next** in Today or on your companion to save the assigned work and start the next block automatically. Long topics stay unfinished until all of their blocks are done. For slide goals, this records the whole displayed slide range. Use **Record partial progress** in Today, or the companion’s slide-count field / **Need more time** control, to report less or more work instead. Breaks advance with **End break & continue**. Timers never mark work done automatically.
 
@@ -101,6 +103,7 @@ npm run smoke           # desktop UI and offline OCR integration
 node scripts/lifecycle.mjs  # timer recovery, backup, restore, and reset
 node scripts/goals.mjs   # slide goals, partial completion, companion, backup
 node scripts/working.mjs # guided working blocks, companion, stop/replan
+node scripts/buttons.mjs # button audit; run smoke first for its OCR fixture
 node scripts/updates.mjs # packaged update UI, consent, progress, and save-before-install
 node scripts/updates-live.mjs # real GitHub check/download, installer launch intercepted
 node scripts/fullscreen.mjs # companion hides for fullscreen windows

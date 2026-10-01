@@ -111,3 +111,57 @@ test('stopping does not break a streak on the next day and stale completion cann
   s.sessions=s.sessions.filter(x=>x.status!=='planned');
   assert.equal(streakInfo(s,at(addDays(date,1),600)).current,1);
 });
+
+test('Start working starts a short block late at night, even when a break cannot fit',()=>{
+  for(const minute of [1425,1432,1439]){
+    const original=fixture();original.settings.days.forEach(d=>{d.breakCount=1;d.breakMinutes=15;});
+    const s=applyAction(original,{type:'start-working'},at(date,minute));
+    assert.ok(s.active,`A block should start at minute ${minute}`);
+    assert.equal(active(s).start,minute);assert.ok(active(s).end<=1440);
+    assert.equal(active(s).end-active(s).start,1440-minute);
+    assert.deepEqual(s.settings,original.settings);
+  }
+});
+test('late-night slide block retains its assigned range and records partial progress',()=>{
+  let s=fixture();s.topics=[];
+  s=applyAction(s,{type:'goal',subjectId:'bio',title:'Late slides',totalSlides:120,startSlide:1,deadline:addDays(date,5),effort:'light'},now);
+  s=applyAction(s,{type:'start-working'},at(date,1435));
+  assert.equal(active(s).end-active(s).start,5);assert.ok(active(s).slideStart>=1);
+  s=applyAction(s,{type:'finish-block',complete:false,slidesCompleted:1},at(date,1436));
+  assert.equal(s.goals[0].completedSlides,1);assert.ok(s.active);
+});
+test('budget, future work, and expired goals produce actionable errors instead of a successful no-op',()=>{
+  let s=fixture();s.settings.days.forEach(d=>{d.budget=0;});
+  assert.throws(()=>applyAction(s,{type:'start-working'},now),/study budget.*Availability/);
+  assert.equal(s.working,null);assert.equal(s.active,null);
+  s=fixture();s.topics.forEach(t=>{t.week=addDays(week,7);});
+  assert.throws(()=>applyAction(s,{type:'start-working'},now),/future date/);
+  s=fixture();s.topics=[];
+  s=applyAction(s,{type:'goal',subjectId:'bio',title:'Expired goal',totalSlides:20,startSlide:1,deadline:date,effort:'light'},now);
+  assert.throws(()=>applyAction(s,{type:'start-working'},at(addDays(date,1),600)),/passed their finish dates/);
+});
+test('resuming reflows unlocked blocks while excluding paused time from work and estimates',()=>{
+  let s=applyAction(fixture(200),{type:'start-working'},now);const id=active(s).id,target=s.active.targetMs;
+  s=applyAction(s,{type:'pause'},now+5*60000);
+  s=applyAction(s,{type:'resume'},now+15*60000);
+  assert.equal(s.active.sessionId,id);assert.equal(s.active.targetMs,target);
+  assert.equal(elapsed(s,now+20*60000),10*60000);
+  const first=active(s);assert.equal(first.workMinutes,90);assert.equal(first.end,700);
+  assert.ok(s.sessions.filter(x=>x.date===date&&x.status==='planned').every(x=>x.start>=first.end));
+  s=applyAction(s,{type:'stop-working'},now+20*60000);
+  assert.equal(s.topics.find(t=>t.id==='topic0').remaining,190);
+});
+test('resume protects commitments and keeps the paused state when remaining time cannot fit',()=>{
+  let s=fixture();s.classes=[{id:'lab',name:'Lab',day:2,start:660,end:720}];
+  s=applyAction(s,{type:'start-working'},now);s=applyAction(s,{type:'pause'},now+5*60000);
+  const copy=structuredClone(s);
+  assert.throws(()=>applyAction(s,{type:'resume'},now+40*60000),/class.*Stop working/);
+  assert.deepEqual(s,copy);
+});
+test('finishing a short ordinary block never loses the unfinished estimate or makes invalid state',()=>{
+  let s=fixture(5);s=applyAction(s,{type:'start-working'},at(date,1439));
+  const id=active(s).topicId;
+  s=applyAction(s,{type:'finish-block',complete:true},at(date,1439)+30000);
+  assert.equal(s.topics.find(t=>t.id===id).status,'pending');
+  assert.ok(s.topics.find(t=>t.id===id).remaining>=5);assert.equal(validateState(s),s);
+});

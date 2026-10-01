@@ -1,6 +1,6 @@
 import { uid, freshState, validateState, reconcile, generatePlan, startSession, finishSession, elapsed, monday, dateKey, addDays, validatePlacement, COLORS } from './planner.mjs';
 import {planGoals,allocateSlides} from './goals.mjs';
-import {startWorking,finishBlock,stopWorking,advanceWorking} from './working.mjs';
+import {startWorking,finishBlock,stopWorking,advanceWorking,resumeWorking} from './working.mjs';
 const text=(s,max=200)=>String(s||'').trim().slice(0,max);
 const number=(n,min,max)=>{n=Number(n);if(!Number.isFinite(n)||n<min||n>max)throw Error(`Enter a number between ${min} and ${max}.`);return n;};
 export function applyAction(original,action,now=Date.now()) {
@@ -65,7 +65,7 @@ export function applyAction(original,action,now=Date.now()) {
     case 'finish-block': finishBlock(state,action,now);break;
     case 'stop-working': stopWorking(state,now);break;
     case 'pause': if(state.active){state.active.elapsedMs=elapsed(state,now);state.active.runningSince=null;state.active.pauseReason=action.reason||'Paused';}break;
-    case 'resume': {if(!state.active)break;if(state.active.elapsedMs>=state.active.targetMs)throw Error('Session time is complete. Check in to finish or request more time.');const s=state.sessions.find(s=>s.id===state.active.sessionId);if(s.date!==dateKey(now))throw Error('This session is from a previous day. Finish it or stop and replan.');const min=Math.floor((now-new Date(`${s.date}T00:00:00`).getTime())/60000),remaining=Math.max(1,Math.ceil((state.active.targetMs-state.active.elapsedMs)/60000));const err=validatePlacement(state,{...s,start:min,end:min+remaining});if(err)throw Error(`${err} Stop and replan to find another time.`);state.active.runningSince=now;state.active.pauseReason=null;break;}
+    case 'resume': {if(state.working){resumeWorking(state,now);break;}if(!state.active)break;if(state.active.elapsedMs>=state.active.targetMs)throw Error('Session time is complete. Check in to finish or request more time.');const s=state.sessions.find(s=>s.id===state.active.sessionId);if(s.date!==dateKey(now))throw Error('This session is from a previous day. Finish it or stop and replan.');const min=Math.floor((now-new Date(`${s.date}T00:00:00`).getTime())/60000),remaining=Math.max(1,Math.ceil((state.active.targetMs-state.active.elapsedMs)/60000));const err=validatePlacement(state,{...s,start:min,end:min+remaining});if(err)throw Error(`${err} Stop and replan to find another time.`);state.active.runningSince=now;state.active.pauseReason=null;break;}
     case 'finish': if(state.working)finishBlock(state,action,now);else finishSession(state,!!action.complete,number(action.extra||30,5,2400),now,action.slidesCompleted==null?undefined:Number(action.slidesCompleted));break;
     case 'stop': stopWorking(state,now);break;
     case 'skip': {const s=state.sessions.find(s=>s.id===action.id);if(s&&['planned','missed'].includes(s.status)){s.status='skipped';if(s.type==='study')s.missedAt||=now;}break;}

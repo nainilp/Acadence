@@ -1,4 +1,4 @@
-import {at,dateKey,monday,addDays,elapsed,generatePlan,startSession,finishSession,EFFORT} from './planner.mjs';
+import {at,dateKey,monday,addDays,elapsed,generatePlan,startSession,finishSession,EFFORT,configFor,validatePlacement} from './planner.mjs';
 import {planGoals,allocateSlides} from './goals.mjs';
 
 // Rebuild all unlocked future work, retaining completed records and locked blocks.
@@ -21,7 +21,7 @@ export function replanRemaining(state,now=Date.now()) {
 
 function topicWork(state,session) {
   const topic=state.topics.find(t=>t.id===session.topicId);
-  const scheduled=state.sessions.filter(s=>s.topicId===topic?.id&&['active','planned'].includes(s.status)).reduce((sum,s)=>sum+s.end-s.start,0);
+  const scheduled=state.sessions.filter(s=>s.topicId===topic?.id&&['active','planned'].includes(s.status)).reduce((sum,s)=>sum+(s.workMinutes??s.end-s.start),0);
   return {topic,minutes:topic?.remaining??Math.max(scheduled,topic?.minutes||0,scheduled?0:EFFORT[topic?.effort]||0)};
 }
 
@@ -45,6 +45,15 @@ export function startWorking(state,now=Date.now()) {
   state.working={startedAt:now,date:dateKey(now),start:Math.floor((now-at(dateKey(now),0))/60000),completedBlocks:0};
   replanRemaining(state,now);
   advanceWorking(state,now);
+  if(!state.active&&!state.working){
+    const today=dateKey(now),cfg=configFor(state,today);
+    const used=state.sessions.filter(s=>s.date===today&&s.type==='study'&&s.status!=='planned').reduce((sum,s)=>sum+(s.actualMinutes||0),0);
+    if(cfg.budget<=used)throw Error('Today’s study budget is used up. Increase today’s study minutes in Availability to start another block.');
+    const pending=state.topics.filter(t=>t.status!=='done');
+    if(pending.every(t=>t.goalId&&state.goals.find(g=>g.id===t.goalId)?.deadline<today))throw Error('Your unfinished slide goals have passed their finish dates. Edit the finish date in Subjects & topics, then start working.');
+    if(pending.every(t=>t.week>monday(new Date(now))||(t.goalId&&state.goals.find(g=>g.id===t.goalId)?.startDate>today)))throw Error('Your remaining work starts on a future date. Add a topic for this week in Subjects & topics, or wait until its start date.');
+    throw Error('No study block fits before the end of today. Check your daily study minutes, classes, and locked sessions in Availability and Your week.');
+  }
 }
 
 export function finishBlock(state,action,now=Date.now()) {
@@ -54,7 +63,8 @@ export function finishBlock(state,action,now=Date.now()) {
   const goal=state.goals.find(g=>g.id===topic?.goalId);
   if(goal||session.type==='break')finishSession(state,action.complete!==false,30,now,action.slidesCompleted==null?undefined:Number(action.slidesCompleted));
   else {
-    const remaining=action.complete===false?Number(action.extra):Math.max(0,minutes-(session.end-session.start));
+    const left=Math.max(0,minutes-(session.workMinutes??session.end-session.start));
+    const remaining=action.complete===false?Number(action.extra):left>0?Math.max(5,left):0;
     if(!Number.isFinite(remaining)||remaining<0||remaining>2400||(remaining>0&&remaining<5))throw Error('Enter remaining work between 5 and 2400 minutes.');
     finishSession(state,remaining===0,remaining||30,now);
   }
@@ -70,7 +80,7 @@ export function stopWorking(state,now=Date.now()) {
     const studied=elapsed(state,now)/60000;
     // Time spent is recorded, but stopping never claims an unfinished block
     // or unreported slides as completed.
-    if(topic&&!topic.goalId)topic.remaining=Math.max(5,Math.ceil(minutes-Math.min(studied,session.end-session.start)));
+    if(topic&&!topic.goalId)topic.remaining=Math.max(5,Math.ceil(minutes-Math.min(studied,session.workMinutes??session.end-session.start)));
     session.actualMinutes=Math.round(studied*10)/10;
     session.status='stopped';session.stoppedAt=now;
     session.originalEnd??=session.end;
@@ -80,5 +90,23 @@ export function stopWorking(state,now=Date.now()) {
   // Unstarted flexible blocks are rescheduled rather than marked as missed.
   state.sessions=state.sessions.filter(s=>s.status!=='planned'||s.locked||s.date<dateKey(now));
   state.working=null;
+  replanRemaining(state,now);
+}
+
+export function resumeWorking(state,now=Date.now()) {
+  const active=state.active;
+  if(!active||active.runningSince)return;
+  if(active.elapsedMs>=active.targetMs)throw Error('This block’s timer is complete. Finish the block or record partial progress.');
+  const session=state.sessions.find(s=>s.id===active.sessionId);
+  if(session.date!==dateKey(now))throw Error('This block is from a previous day. Finish it or stop working before starting again.');
+  const start=Math.floor((now-at(session.date,0))/60000),remaining=Math.max(1,Math.ceil((active.targetMs-active.elapsedMs)/60000));
+  const others=state.sessions.filter(s=>s.id!==session.id&&(s.status!=='planned'||s.locked||s.date!==session.date));
+  const error=validatePlacement(state,{...session,start,end:start+remaining},others);
+  if(error)throw Error(`${error} Stop working to replan around this commitment.`);
+  session.workMinutes??=session.end-session.start;
+  session.originalEnd??=session.end;
+  session.end=start+remaining;
+  active.runningSince=now;active.pauseReason=null;
+  // Shift only unlocked upcoming blocks; paused time is not counted as work.
   replanRemaining(state,now);
 }

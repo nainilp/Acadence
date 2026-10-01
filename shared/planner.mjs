@@ -33,7 +33,7 @@ export function configFor(state,date) {
 }
 export function blockedFor(state,date) { return state.classes.filter(c=>c.date?c.date===date:c.day===dayIndex(date)).map(c=>[Math.max(0,c.start-state.settings.buffer),Math.min(1440,c.end+state.settings.buffer)]); }
 export function availableFor(state,date) { return subtract(configFor(state,date).slots,blockedFor(state,date)); }
-const budgetCost=s=>s.type!=='study'?0:['planned','active'].includes(s.status)?s.end-s.start:(s.actualMinutes||0);
+const budgetCost=s=>s.type!=='study'?0:['planned','active'].includes(s.status)?(s.workMinutes??s.end-s.start):(s.actualMinutes||0);
 export function isOverdue(s,now=Date.now(),state) { return !(state?.working?.date===s.date&&!s.locked)&&s.type==='study'&&s.status==='planned'&&now>at(s.date,s.start)+10*60000; }
 export function reconcile(state,now=Date.now()) {
   let changed=false;
@@ -50,18 +50,21 @@ export function generatePlan(state, week, now=Date.now()) {
   let capacity=0;
   const dayData=dates.map(date=>{
     const cfg=configFor(state,date), preserved=keep.filter(s=>s.date===date), used=preserved.reduce((a,s)=>a+budgetCost(s),0);
-    const lower=date===dateKey(now)?Math.ceil((now-at(date,0))/60000/5)*5:0;
+    const working=state.working?.date===date;
+    const lower=date===dateKey(now)?(working?Math.floor((now-at(date,0))/60000):Math.ceil((now-at(date,0))/60000/5)*5):0;
     let intervals=subtract(availableFor(state,date),preserved.filter(s=>['planned','active'].includes(s.status)).map(s=>[s.start,s.end]));
     if(date<dateKey(now))intervals=[];else intervals=subtract(intervals,[[0,lower]]);
     const preservedBreaks=preserved.filter(s=>s.type==='break'&&s.status!=='skipped').length;
-    const breaks=Math.max(0,cfg.breakCount-preservedBreaks);
     const free=intervals.reduce((a,[s,e])=>a+e-s,0);
+    // A short, explicitly started block can use the time left today. Do not
+    // reserve a break that would leave no room for any work.
+    const breaks=Math.min(Math.max(0,cfg.breakCount-preservedBreaks),working?Math.max(0,Math.floor((free-1)/cfg.breakMinutes)):20);
     const budget=Math.max(0,Math.floor(Math.min(cfg.budget-used,free-breaks*cfg.breakMinutes)));
     capacity+=budget;
     return {date,cfg,intervals,budget,breaks,preserved};
   });
   const reserved=new Map();
-  keep.filter(s=>s.type==='study'&&['planned','active'].includes(s.status)&&at(s.date,s.end)>now).forEach(s=>reserved.set(s.topicId,(reserved.get(s.topicId)||0)+s.end-s.start));
+  keep.filter(s=>s.type==='study'&&['planned','active'].includes(s.status)&&at(s.date,s.end)>now).forEach(s=>reserved.set(s.topicId,(reserved.get(s.topicId)||0)+(s.workMinutes??s.end-s.start)));
   const manualTotal=relevant.filter(t=>!t.goalId&&(t.minutes||t.remaining!=null)).reduce((a,t)=>a+Math.max(0,(t.remaining??t.minutes)-(reserved.get(t.id)||0)),0);
   const autoTotal=relevant.filter(t=>!t.goalId&&!t.minutes&&t.remaining==null).reduce((a,t)=>a+EFFORT[t.effort],0);
   const scale=autoTotal?Math.min(1,Math.max(0,capacity-manualTotal)/autoTotal):1;
@@ -80,7 +83,7 @@ export function generatePlan(state, week, now=Date.now()) {
     let used=0,breaks=0,sinceBreak=0;
     if(state.working?.date===day.date){
       const lastBreak=Math.max(state.working.startedAt,...day.preserved.filter(s=>s.type==='break'&&s.status==='completed').map(s=>s.finishedAt||0));
-      sinceBreak=day.preserved.filter(s=>s.type==='study'&&s.status==='completed'&&s.finishedAt>=lastBreak).reduce((sum,s)=>sum+(s.originalEnd??s.end)-(s.originalStart??s.start),0);
+      sinceBreak=day.preserved.filter(s=>s.type==='study'&&s.status==='completed'&&s.finishedAt>=lastBreak).reduce((sum,s)=>sum+(s.workMinutes??(s.originalEnd??s.end)-(s.originalStart??s.start)),0);
     }
     const target=Math.max(30,Math.floor(day.budget/(day.breaks+1)));
     for(const [start,end] of day.intervals){
@@ -93,10 +96,11 @@ export function generatePlan(state, week, now=Date.now()) {
         }
         const {i,item}=candidate;
         const space=Math.min(end-pos,day.budget-used);
-        const minimum=Math.min(30,item.goal?item.target:item.left);
+        const working=state.working?.date===day.date;
+        const minimum=Math.min(working?1:30,item.goal?item.target:item.left);
         if(space<minimum)break;
         let size=Math.min(item.left,item.goal?item.target:90,space);
-        if(item.left>size&&item.left<60&&!item.topic.minutes)break;
+        if(!working&&item.left>size&&item.left<60&&!item.topic.minutes)break;
         // Do not leave a tiny tail on a topic when splitting a long estimate.
         if(item.left-size>0&&item.left-size<30&&size>30)size=Math.max(30,size-(30-(item.left-size)));
         planned.push({id:uid(),type:'study',subjectId:item.topic.subjectId,topicId:item.topic.id,date:day.date,start:pos,end:pos+size,status:'planned',locked:false,attended:false,actualMinutes:0});
@@ -205,6 +209,7 @@ export function validateState(s) {
   for(const sub of s.subjects)if(typeof sub.name!=='string'||!/^#[0-9a-f]{6}$/i.test(sub.color))throw Error('Subject details are invalid.');
   for(const t of s.topics)if(typeof t.title!=='string'||!s.subjects.some(x=>x.id===t.subjectId)||!EFFORT[t.effort]||!validDate(t.week)||(t.deadline&&!validDate(t.deadline))||!['pending','done'].includes(t.status)||(t.minutes!=null&&!finite(t.minutes,5,2400))||(t.remaining!=null&&!finite(t.remaining,5,2400)))throw Error('Topic details are invalid.');
   for(const row of [...s.classes,...s.sessions])if(!finite(row.start,0,1439)||!finite(row.end,1,1440)||row.end<=row.start)throw Error('A schedule entry has invalid times.');
+  for(const row of s.sessions)if(row.workMinutes!=null&&!finite(row.workMinutes,1,1440))throw Error('A study block has invalid allocated time.');
   for(const c of s.classes)if(typeof c.name!=='string'||!Number.isInteger(c.day)||c.day<0||c.day>6||(c.date&&!validDate(c.date)))throw Error('A class has invalid details.');
   for(const row of s.sessions)if(!validDate(row.date)||!['study','break'].includes(row.type)||!['planned','active','completed','missed','skipped','stopped'].includes(row.status)||(row.type==='study'&&(!s.topics.some(t=>t.id===row.topicId)||!s.subjects.some(sub=>sub.id===row.subjectId))))throw Error('A session has invalid details.');
   for(const row of s.sessions){if(row.goalId&&(!s.goals.some(g=>g.id===row.goalId)||!s.topics.some(t=>t.id===row.topicId&&t.goalId===row.goalId)||!Number.isInteger(row.slideStart)||!Number.isInteger(row.slideEnd)||row.slideStart<1||row.slideEnd<row.slideStart||(row.slidesCompleted!=null&&(!Number.isInteger(row.slidesCompleted)||!finite(row.slidesCompleted,0,row.slideEnd-row.slideStart+1)))))throw Error('A slide session has invalid progress.');}
