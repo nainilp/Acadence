@@ -1,18 +1,24 @@
 import {_electron as electron} from '@playwright/test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import {dateKey,addDays} from '../shared/planner.mjs';
 
 const root=process.cwd(),dataPath=path.join(root,'.test-data',`working-${Date.now()}`),errors=[];
+const {version}=JSON.parse(await readFile('package.json','utf8'));
 await mkdir('test-results',{recursive:true});
-const app=await electron.launch({args:['.'],cwd:root,env:{...process.env,ACADENCE_DATA_DIR:dataPath}});
+const app=await electron.launch({...(process.env.ACADENCE_EXECUTABLE?{executablePath:process.env.ACADENCE_EXECUTABLE,args:[]}:{args:['.']}),cwd:root,env:{...process.env,ACADENCE_DATA_DIR:dataPath}});
 app.on('window',page=>page.on('pageerror',e=>errors.push(e.message)));
 try{
   await app.firstWindow();
   let page;
   for(let i=0;i<100;i++){page=app.windows().find(w=>w.url().includes('index.html')&&!w.url().includes('pet=1'));if(page)break;await new Promise(r=>setTimeout(r,100));}
   assert.ok(page,'Main planner window is present');await page.waitForSelector('.app-shell');
+  assert.equal(await app.evaluate(({app})=>app.getVersion()),version,'App version matches the release version');
+  // Keep the disposable study fixture in the morning so a late-night test run
+  // still has room for multiple blocks. IPC, planning, and persistence stay real.
+  const testNow=await app.evaluate(()=>{const clock=new Date();clock.setHours(10,0,0,0);const now=clock.getTime();Date.now=()=>now;return now;});
+  await page.evaluate(now=>{Date.now=()=>now;},testNow);
   await page.evaluate(async({deadline})=>{
     const api=window.acadence;
     await api.action({type:'subject',name:'Biology'});await api.action({type:'subject',name:'Mathematics'});
@@ -27,7 +33,7 @@ try{
   await page.screenshot({path:'test-results/working-desktop.png',fullPage:true});
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>!w.webContents.getURL().includes('pet=1')).setSize(900,680));
   await page.screenshot({path:'test-results/working-compact.png',fullPage:true});
-  const pet=app.windows().find(w=>w.url().includes('pet=1'));await pet.getByRole('button',{name:'Talk to your study companion'}).click();
+  const pet=app.windows().find(w=>w.url().includes('pet=1'));await pet.evaluate(now=>{Date.now=()=>now;},testNow);await pet.getByRole('button',{name:'Talk to your study companion'}).click();
   await pet.getByRole('button',{name:'Done block & next',exact:true}).click();
   await page.waitForFunction(()=>window.acadence.get().then(s=>s.working?.completedBlocks===1));
   state=await page.evaluate(()=>window.acadence.get());assert.equal(state.goals[0].completedSlides,first.slideEnd-first.slideStart+1);

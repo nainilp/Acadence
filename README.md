@@ -4,13 +4,15 @@ A personal Windows study planner with a floating white Shih Tzu companion with s
 
 ## Install and open
 
-Run **`release/Acadence-Setup-1.1.3.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, or API key is needed. Studying works offline; update checks require an internet connection.
+Run **`release/Acadence-Setup-1.1.4.exe`**. The installer installs for the current Windows user and can create a desktop shortcut. The installed app is self-contained: no Node.js, account, or API key is needed. Studying works offline; update checks require an internet connection.
+
+Version 1.1.4 adds **Start working**, automatic block progression from the app or companion, partial-progress check-ins, and **Stop working** to save progress and replan unfinished work.
 
 Version 1.1.2 adds equal slide allocation across study blocks and automatic redistribution after recording actual progress, including slides studied ahead and outside the app.
 
 Version 1.1.3 checks [GitHub Releases](https://github.com/nainilp/Acadence/releases) on launch and every six hours while open. A newer stable release offers **Update now** or **Not now**. Update now downloads and verifies the installer, saves study data, pauses any running timer, then installs and restarts. Not now skips that version’s automatic prompts until the next launch. Automatic prompts wait until the active study session and any fullscreen activity end. **Settings → App updates → Check for updates** checks manually, shows download progress, and can offer a declined update again. Offline checks never prevent studying.
 
-People running 1.1.2 or earlier need to install 1.1.3 once manually: choose **Quit Acadence** from the system-tray menu, then run the newest installer using the same installation location. Existing study data and settings are preserved. Future releases can be installed from the update dialog.
+People running 1.1.2 or earlier need to install the newest release once manually: choose **Quit Acadence** from the system-tray menu, then run the newest installer using the same installation location. Existing study data and settings are preserved. Future releases can be installed from the update dialog.
 
 Version 1.1 introduces a full claymorphism redesign: pearl-white surfaces, blush-pink controls, raised cards, inset fields, sculpted progress indicators, alongside the original illustrated white Shih Tzu with brown patches and a blue bandana. Dark mode uses charcoal-plum surfaces and rose accents. Keyboard focus and reduced-motion preferences remain supported. Installing over version 1.0 preserves local study records and settings.
 
@@ -98,6 +100,7 @@ npm run build           # production renderer
 npm run smoke           # desktop UI and offline OCR integration
 node scripts/lifecycle.mjs  # timer recovery, backup, restore, and reset
 node scripts/goals.mjs   # slide goals, partial completion, companion, backup
+node scripts/working.mjs # guided working blocks, companion, stop/replan
 node scripts/updates.mjs # packaged update UI, consent, progress, and save-before-install
 node scripts/updates-live.mjs # real GitHub check/download, installer launch intercepted
 node scripts/fullscreen.mjs # companion hides for fullscreen windows
